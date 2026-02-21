@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Waiver {{ waiver.waiver_number }} — FAA Waiver Browser{% endblock %}
+
+{% block content %}
+
+  <a class="back-link" href="javascript:history.back()">&larr; Back</a>
+
+  <h2 style="margin-top:0;">Waiver: {{ waiver.waiver_number or 'N/A' }}</h2>
+
+  <table class="detail-table">
+    <tr><th>Waiver Number</th><td>{{ waiver.waiver_number or '—' }}</td></tr>
+    <tr><th>Date of Issuance</th><td>{{ waiver.date_of_issuance or '—' }}</td></tr>
+    <tr><th>Company Name</th><td>{{ waiver.company_name or '—' }}</td></tr>
+    <tr><th>Responsible Person</th><td>{{ waiver.responsible_person or '—' }}</td></tr>
+    <tr><th>Waivered Regulation</th><td>{{ waiver.waivered_regulation or '—' }}</td></tr>
+    <tr>
+      <th>PDF</th>
+      <td>
+        {% if waiver.pdf_url %}
+          <a href="{{ waiver.pdf_url }}" target="_blank" rel="noopener">FAA source (external)</a>
+          {% if waiver.pdf_local_path %}
+            &nbsp;|&nbsp;
+            <a href="/pdf/{{ waiver.pdf_local_path | basename }}" target="_blank">Local copy</a>
+          {% endif %}
+        {% elif waiver.pdf_local_path %}
+          <a href="/pdf/{{ waiver.pdf_local_path | basename }}" target="_blank">Local copy</a>
+        {% else %}
+          No PDF available
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% if waiver.pdf_text %}
+    <h3 style="margin-top:24px;">Extracted PDF Text</h3>
+    <div class="pdf-text">{{ waiver.pdf_text }}</div>
+  {% endif %}
+
+{% endblock %}

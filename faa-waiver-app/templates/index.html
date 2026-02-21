@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}FAA Waiver Browser{% endblock %}
+
+{% block content %}
+
+  <form method="get" action="/" class="search-bar">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search by company or responsible person…">
+    <button type="submit">Search</button>
+    {% if q %}
+      <a href="/" class="clear-link">Clear</a>
+    {% endif %}
+  </form>
+
+  <p class="meta">
+    {% if q %}
+      {{ total }} result{{ 's' if total != 1 }} for "<strong>{{ q }}</strong>"
+      &mdash; page {{ page }} of {{ total_pages }}
+    {% else %}
+      {{ total }} waiver{{ 's' if total != 1 }} total &mdash; page {{ page }} of {{ total_pages }}
+    {% endif %}
+  </p>
+
+  {% if waivers %}
+    <table>
+      <thead>
+        <tr>
+          <th>Waiver Number</th>
+          <th>Date of Issuance</th>
+          <th>Company Name</th>
+          <th>Responsible Person</th>
+          <th>Waivered Regulation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in waivers %}
+          <tr>
+            <td><a href="/waiver/{{ w.id }}">{{ w.waiver_number or '—' }}</a></td>
+            <td>{{ w.date_of_issuance or '—' }}</td>
+            <td>{{ w.company_name or '—' }}</td>
+            <td>{{ w.responsible_person or '—' }}</td>
+            <td>{{ w.waivered_regulation or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      {% if page > 1 %}
+        <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}">&laquo; Prev</a>
+      {% endif %}
+
+      {% set start = [1, page - 2] | max %}
+      {% set end   = [total_pages, page + 2] | min %}
+
+      {% if start > 1 %}
+        <a href="/?page=1{% if q %}&q={{ q }}{% endif %}">1</a>
+        {% if start > 2 %}<span>&hellip;</span>{% endif %}
+      {% endif %}
+
+      {% for p in range(start, end + 1) %}
+        {% if p == page %}
+          <span class="current">{{ p }}</span>
+        {% else %}
+          <a href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if end < total_pages %}
+        {% if end < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+        <a href="/?page={{ total_pages }}{% if q %}&q={{ q }}{% endif %}">{{ total_pages }}</a>
+      {% endif %}
+
+      {% if page < total_pages %}
+        <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}">Next &raquo;</a>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <div class="no-results">
+      {% if q %}
+        No waivers matched "<strong>{{ q }}</strong>".
+      {% else %}
+        No waivers in database yet. Run <code>python scraper.py</code> first.
+      {% endif %}
+    </div>
+  {% endif %}
+
+{% endblock %}

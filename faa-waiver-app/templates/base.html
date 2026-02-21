@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}FAA Waiver Browser{% endblock %}</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f5f5f5; color: #222; }
+    header { background: #003366; color: white; padding: 12px 24px; }
+    header a { color: #aed6f1; text-decoration: none; font-size: 0.9em; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th { background: #003366; color: white; padding: 8px 12px; text-align: left; font-size: 0.85em; }
+    td { padding: 8px 12px; border-bottom: 1px solid #ddd; font-size: 0.88em; vertical-align: top; }
+    tr:hover td { background: #eef4fb; }
+    a { color: #0057a8; }
+    .pagination { margin: 16px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pagination a, .pagination span {
+      display: inline-block; padding: 5px 11px; border: 1px solid #ccc;
+      border-radius: 3px; font-size: 0.88em; text-decoration: none; background: white;
+    }
+    .pagination .current { background: #003366; color: white; border-color: #003366; }
+    .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .search-bar input[type=text] { flex: 1; padding: 7px 10px; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9em; }
+    .search-bar button { padding: 7px 16px; background: #003366; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; }
+    .search-bar .clear-link { padding: 7px 14px; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9em; text-decoration: none; background: white; color: #333; }
+    .meta { font-size: 0.82em; color: #666; margin-bottom: 10px; }
+    .detail-table { width: 100%; background: white; border-collapse: collapse; }
+    .detail-table th { width: 200px; background: #f0f0f0; color: #333; font-weight: bold; text-align: left; padding: 10px 14px; border-bottom: 1px solid #ddd; }
+    .detail-table td { padding: 10px 14px; border-bottom: 1px solid #ddd; }
+    .back-link { margin-bottom: 16px; display: block; font-size: 0.9em; }
+    .pdf-text { white-space: pre-wrap; font-family: monospace; font-size: 0.8em; background: #f9f9f9; border: 1px solid #ddd; padding: 12px; max-height: 400px; overflow-y: auto; }
+    .no-results { padding: 24px; text-align: center; color: #666; background: white; }
+  </style>
+</head>
+<body>
+  <header>
+    <span style="font-size:1.2em; font-weight:bold;">FAA Part 107 Waiver Browser</span>
+    &nbsp;&nbsp;
+    <a href="/">All Waivers</a>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
