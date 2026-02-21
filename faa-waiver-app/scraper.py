@@ -5,10 +5,29 @@ from database import SessionLocal, Waiver, init_db
 
 FAA_URL = "https://www.faa.gov/uas/commercial_operators/part_107_waivers/waivers_issued"
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; faa-waiver-scraper/1.0)"}
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 
-def download_pdf(pdf_url):
+def make_session():
+    """Return a requests.Session with browser-like headers."""
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    return s
+
+
+def download_pdf(http_session, pdf_url):
     """Download a PDF to the pdfs/ folder. Returns the local path, or None on failure."""
     os.makedirs(PDF_DIR, exist_ok=True)
     filename = pdf_url.rstrip("/").split("/")[-1]
@@ -18,7 +37,7 @@ def download_pdf(pdf_url):
     if os.path.exists(local_path):
         return local_path
     try:
-        response = requests.get(pdf_url, headers=HEADERS, timeout=30)
+        response = http_session.get(pdf_url, timeout=30)
         response.raise_for_status()
         with open(local_path, "wb") as f:
             f.write(response.content)
@@ -31,12 +50,13 @@ def download_pdf(pdf_url):
 def scrape_waivers():
     init_db()
     session = SessionLocal()
+    http = make_session()
 
     try:
         existing = {w.waiver_number for w in session.query(Waiver.waiver_number).all()}
         print(f"Found {len(existing)} existing records in database.")
 
-        response = requests.get(FAA_URL, headers=HEADERS, timeout=30)
+        response = http.get(FAA_URL, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -107,7 +127,7 @@ def scrape_waivers():
                 if href.lower().endswith(".pdf") or "pdf" in href.lower():
                     pdf_url = href if href.startswith("http") else f"https://www.faa.gov{href}"
                     print(f"  Downloading PDF for {waiver_number}...")
-                    pdf_local_path = download_pdf(pdf_url)
+                    pdf_local_path = download_pdf(http, pdf_url)
 
             waiver = Waiver(
                 waiver_number=waiver_number,
