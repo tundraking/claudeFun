@@ -1,2 +1,0 @@
-# claudeFun
-Testing Claude Code
