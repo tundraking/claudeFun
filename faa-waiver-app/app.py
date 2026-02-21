@@ -1,4 +1,5 @@
 import os
+import re
 from flask import Flask, render_template, request, abort, send_from_directory, g
 from database import SessionLocal, Waiver, init_db
 
@@ -10,6 +11,21 @@ PER_PAGE = 25
 @app.template_filter("basename")
 def basename_filter(path):
     return os.path.basename(path) if path else ""
+
+
+@app.template_filter("clean_waiver_number")
+def clean_waiver_number_filter(value):
+    if not value:
+        return value
+    m = re.match(r"(107W-\d{4}-\d+)", value)
+    return m.group(1) if m else value
+
+
+@app.template_filter("clean_person")
+def clean_person_filter(value):
+    if not value:
+        return value
+    return re.sub(r"\s*\(pdf\)\s*$", "", value, flags=re.IGNORECASE).strip()
 
 
 @app.before_request

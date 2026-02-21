@@ -35,10 +35,10 @@
       <tbody>
         {% for w in waivers %}
           <tr>
-            <td><a href="/waiver/{{ w.id }}">{{ w.waiver_number or '—' }}</a></td>
+            <td><a href="/waiver/{{ w.id }}">{{ (w.waiver_number or '—') | clean_waiver_number }}</a></td>
             <td>{{ w.date_of_issuance or '—' }}</td>
             <td>{{ w.company_name or '—' }}</td>
-            <td>{{ w.responsible_person or '—' }}</td>
+            <td>{{ (w.responsible_person or '—') | clean_person }}</td>
             <td>{{ w.waivered_regulation or '—' }}</td>
           </tr>
         {% endfor %}
