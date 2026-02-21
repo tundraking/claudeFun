@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy import create_engine, Column, Integer, String, Text, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///waivers.db"
@@ -24,3 +24,33 @@ class Waiver(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+
+def setup_fts():
+    with engine.connect() as conn:
+        conn.execute(text(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS waivers_fts
+            USING fts5(
+                waiver_number,
+                responsible_person,
+                company_name,
+                waivered_regulation,
+                pdf_text,
+                content='waivers',
+                content_rowid='id'
+            )
+            """
+        ))
+        conn.commit()
+
+
+def populate_fts():
+    with engine.connect() as conn:
+        conn.execute(text("INSERT INTO waivers_fts(waivers_fts) VALUES('rebuild')"))
+        conn.commit()
+
+
+if __name__ == "__main__":
+    setup_fts()
+    populate_fts()

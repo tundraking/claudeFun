@@ -15,7 +15,7 @@ def extract_text_from_pdfs():
             return
 
         for filename in pdf_files:
-            local_path = os.path.join("pdfs", filename)
+            local_path = os.path.join(PDFS_DIR, filename)
             record = session.query(Waiver).filter(Waiver.pdf_local_path == local_path).first()
 
             if record is None:

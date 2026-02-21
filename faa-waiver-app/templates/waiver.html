@@ -63,7 +63,7 @@
 
   {% if waiver.pdf_text %}
     <h6 class="text-muted">Extracted PDF Text</h6>
-    <div class="pdf-text rounded border">{{ waiver.pdf_text }}</div>
+    <div class="pdf-text rounded border">{{ waiver.pdf_text | clean_pdf_text }}</div>
   {% endif %}
 
 {% endblock %}
