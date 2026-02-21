@@ -48,6 +48,11 @@ _FOOTER_LINE = re.compile(
     re.IGNORECASE,
 )
 
+_CERT_HEADER = re.compile(
+    r"^\s*certificate\s+of\s+waiver\s+number\s+107W-\d{4}-\d+\s*$",
+    re.IGNORECASE,
+)
+
 
 @app.template_filter("clean_pdf_text")
 def clean_pdf_text_filter(value):
@@ -55,7 +60,16 @@ def clean_pdf_text_filter(value):
     if not value:
         return value
     lines = value.splitlines()
-    cleaned = [line for line in lines if not _FOOTER_LINE.match(line)]
+    seen_cert_header = False
+    cleaned = []
+    for line in lines:
+        if _CERT_HEADER.match(line):
+            if not seen_cert_header:
+                seen_cert_header = True
+                cleaned.append(line)   # keep the first occurrence
+            # drop all subsequent occurrences
+        elif not _FOOTER_LINE.match(line):
+            cleaned.append(line)
     # Collapse runs of more than one blank line into a single blank line
     result = re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned))
     return result.strip()
