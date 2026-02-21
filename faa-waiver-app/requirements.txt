@@ -3,3 +3,5 @@ SQLAlchemy
 requests
 beautifulsoup4
 pdfplumber
+python-dotenv
+anthropic
