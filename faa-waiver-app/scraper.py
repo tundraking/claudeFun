@@ -81,8 +81,7 @@ def scrape_waivers():
                     return i
             return None
 
-        idx_waiver     = col_index(["waiver number", "waiver no", "waiver#"])
-        idx_date       = col_index(["date"])
+        idx_date       = col_index(["date of issuance"])
         idx_person     = col_index(["responsible person", "person"])
         idx_company    = col_index(["company"])
         idx_regulation = col_index(["regulation", "waivered"])
@@ -100,11 +99,25 @@ def scrape_waivers():
                     return ""
                 return cells[idx].get_text(strip=True)
 
-            waiver_number     = cell_text(idx_waiver)
-            date_of_issuance  = cell_text(idx_date)
-            responsible_person = cell_text(idx_person)
-            company_name      = cell_text(idx_company)
+            date_of_issuance    = cell_text(idx_date)
+            responsible_person  = cell_text(idx_person)
+            company_name        = cell_text(idx_company)
             waivered_regulation = cell_text(idx_regulation)
+
+            # Find PDF link anywhere in the row
+            pdf_url = None
+            pdf_local_path = None
+            anchor = row.find("a", href=True)
+            if anchor:
+                href = anchor["href"]
+                if href.lower().endswith(".pdf") or "pdf" in href.lower():
+                    pdf_url = href if href.startswith("http") else f"https://www.faa.gov{href}"
+
+            # Derive waiver number from PDF filename, or fall back to a composite key
+            if pdf_url:
+                waiver_number = pdf_url.rstrip("/").split("/")[-1].rsplit(".", 1)[0]
+            else:
+                waiver_number = f"{date_of_issuance}|{company_name}|{responsible_person}"
 
             if not waiver_number:
                 continue
@@ -113,21 +126,9 @@ def scrape_waivers():
                 skipped += 1
                 continue
 
-            # Look for a PDF link in the waiver number cell (or anywhere in the row)
-            pdf_url = None
-            pdf_local_path = None
-            link_cell = cells[idx_waiver] if idx_waiver is not None else None
-            anchor = None
-            if link_cell:
-                anchor = link_cell.find("a", href=True)
-            if not anchor:
-                anchor = row.find("a", href=True)
-            if anchor:
-                href = anchor["href"]
-                if href.lower().endswith(".pdf") or "pdf" in href.lower():
-                    pdf_url = href if href.startswith("http") else f"https://www.faa.gov{href}"
-                    print(f"  Downloading PDF for {waiver_number}...")
-                    pdf_local_path = download_pdf(http, pdf_url)
+            if pdf_url:
+                print(f"  Downloading PDF for {waiver_number}...")
+                pdf_local_path = download_pdf(http, pdf_url)
 
             waiver = Waiver(
                 waiver_number=waiver_number,
