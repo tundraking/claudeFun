@@ -213,9 +213,11 @@ def scrape_waivers():
 
         print(f"Done. Added {total_added} new records, skipped {total_skipped} duplicates "
               f"across {page_num} page(s).")
+        return total_added
 
     except requests.RequestException as e:
         print(f"Error fetching page: {e}")
+        return 0
     finally:
         session.close()
 

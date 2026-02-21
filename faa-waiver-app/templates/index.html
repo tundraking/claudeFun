@@ -11,6 +11,14 @@
 
 {% macro page_url(p) %}/?{{ filter_qs() }}&sort={{ sort }}&order={{ order }}&page={{ p }}{% endmacro %}
 
+{# ── Refresh button ───────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center gap-3 mb-4">
+  <button id="refreshBtn" class="btn btn-success" onclick="runRefresh()">
+    <i class="bi bi-arrow-clockwise me-1"></i>Fetch new Part 107 waivers from the FAA table
+  </button>
+  <span id="refreshMsg" class="text-muted small"></span>
+</div>
+
 {# ── Search form ─────────────────────────────────────────────────────── #}
 <div class="card shadow-sm mb-4">
   <div class="card-body">
@@ -165,4 +173,32 @@
   </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  const msg = document.getElementById('refreshMsg');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Fetching…';
+  msg.textContent = '';
+  try {
+    const resp = await fetch('/refresh', { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      msg.className = 'text-success small';
+      msg.textContent = `Done — ${data.new_waivers} new waiver(s) added, ${data.pdfs_processed} PDF(s) processed.`;
+    } else {
+      msg.className = 'text-danger small';
+      msg.textContent = 'Refresh failed. Check the console for details.';
+    }
+  } catch (e) {
+    msg.className = 'text-danger small';
+    msg.textContent = 'Request error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Fetch new Part 107 waivers from the FAA table';
+}
+</script>
 {% endblock %}
