@@ -2,7 +2,7 @@ import os
 import re
 from flask import Flask, render_template, request, abort, send_from_directory, g
 from sqlalchemy import text
-from database import SessionLocal, Waiver, init_db
+from database import SessionLocal, Waiver, init_db, setup_fts
 
 app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
@@ -155,4 +155,5 @@ def serve_pdf(filename):
 
 if __name__ == "__main__":
     init_db()
+    setup_fts()
     app.run(debug=True)
