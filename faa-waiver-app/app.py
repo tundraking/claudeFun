@@ -7,6 +7,14 @@ app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
 PER_PAGE = 25
 
+SORT_COLUMNS = {
+    "waiver_number": Waiver.waiver_number,
+    "date": Waiver.date_of_issuance,
+    "company": Waiver.company_name,
+    "person": Waiver.responsible_person,
+    "regulation": Waiver.waivered_regulation,
+}
+
 
 @app.template_filter("basename")
 def basename_filter(path):
@@ -42,27 +50,41 @@ def close_db(exc=None):
 
 @app.route("/")
 def index():
-    q = request.args.get("q", "").strip()
+    date = request.args.get("date", "").strip()
+    person = request.args.get("person", "").strip()
+    company = request.args.get("company", "").strip()
+    regulation = request.args.get("regulation", "").strip()
+    sort = request.args.get("sort", "id")
+    order = request.args.get("order", "asc")
     page = max(1, request.args.get("page", 1, type=int))
+
     query = g.db.query(Waiver)
-    if q:
-        pattern = f"%{q}%"
-        query = query.filter(
-            Waiver.company_name.ilike(pattern) | Waiver.responsible_person.ilike(pattern)
-        )
+    if date:
+        query = query.filter(Waiver.date_of_issuance.ilike(f"%{date}%"))
+    if person:
+        query = query.filter(Waiver.responsible_person.ilike(f"%{person}%"))
+    if company:
+        query = query.filter(Waiver.company_name.ilike(f"%{company}%"))
+    if regulation:
+        query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+
+    sort_col = SORT_COLUMNS.get(sort, Waiver.id)
+    query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
+
     total = query.count()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
     page = min(page, total_pages)
-    waivers = (
-        query.order_by(Waiver.id)
-        .offset((page - 1) * PER_PAGE)
-        .limit(PER_PAGE)
-        .all()
-    )
+    waivers = query.offset((page - 1) * PER_PAGE).limit(PER_PAGE).all()
+
     return render_template(
         "index.html",
         waivers=waivers,
-        q=q,
+        date=date,
+        person=person,
+        company=company,
+        regulation=regulation,
+        sort=sort,
+        order=order,
         page=page,
         total=total,
         total_pages=total_pages,

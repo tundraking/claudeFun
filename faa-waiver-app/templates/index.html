@@ -4,86 +4,165 @@
 
 {% block content %}
 
-  <form method="get" action="/" class="search-bar">
-    <input type="text" name="q" value="{{ q }}" placeholder="Search by company or responsible person…">
-    <button type="submit">Search</button>
-    {% if q %}
-      <a href="/" class="clear-link">Clear</a>
-    {% endif %}
-  </form>
+{# ── URL-building macros ─────────────────────────────────────────────── #}
+{% macro filter_qs() %}date={{ date | urlencode }}&person={{ person | urlencode }}&company={{ company | urlencode }}&regulation={{ regulation | urlencode }}{% endmacro %}
 
-  <p class="meta">
-    {% if q %}
-      {{ total }} result{{ 's' if total != 1 }} for "<strong>{{ q }}</strong>"
-      &mdash; page {{ page }} of {{ total_pages }}
-    {% else %}
-      {{ total }} waiver{{ 's' if total != 1 }} total &mdash; page {{ page }} of {{ total_pages }}
-    {% endif %}
-  </p>
+{% macro sort_url(col) %}/?{{ filter_qs() }}&sort={{ col }}&order={% if sort == col and order == 'asc' %}desc{% else %}asc{% endif %}{% endmacro %}
 
-  {% if waivers %}
-    <table>
+{% macro page_url(p) %}/?{{ filter_qs() }}&sort={{ sort }}&order={{ order }}&page={{ p }}{% endmacro %}
+
+{# ── Search form ─────────────────────────────────────────────────────── #}
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Search Waivers</h5>
+    <form method="get" action="/">
+      <div class="row g-3">
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label fw-semibold">Date of Issuance</label>
+          <input type="text" name="date" class="form-control" value="{{ date }}" placeholder="e.g. 2024">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label fw-semibold">Responsible Person</label>
+          <input type="text" name="person" class="form-control" value="{{ person }}" placeholder="Name…">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label fw-semibold">Company Name</label>
+          <input type="text" name="company" class="form-control" value="{{ company }}" placeholder="Company…">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label fw-semibold">Waivered Regulation</label>
+          <input type="text" name="regulation" class="form-control" value="{{ regulation }}" placeholder="e.g. 107.51">
+        </div>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-search me-1"></i>Search
+        </button>
+        <a href="/" class="btn btn-outline-secondary">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Result count ────────────────────────────────────────────────────── #}
+<p class="text-muted small mb-2">
+  {{ total }} waiver{{ 's' if total != 1 }} &mdash; page {{ page }} of {{ total_pages }}
+</p>
+
+{% if waivers %}
+
+  {# ── Results table ───────────────────────────────────────────────── #}
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered table-hover align-middle mb-0 bg-white">
       <thead>
         <tr>
-          <th>Waiver Number</th>
-          <th>Date of Issuance</th>
-          <th>Company Name</th>
-          <th>Responsible Person</th>
-          <th>Waivered Regulation</th>
+          <th>
+            <a href="{{ sort_url('waiver_number') }}" class="sort-link">
+              Waiver Number
+              <i class="bi bi-caret-{{ 'up' if (sort == 'waiver_number' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'waiver_number' %} opacity-25{% endif %}"></i>
+            </a>
+          </th>
+          <th>
+            <a href="{{ sort_url('date') }}" class="sort-link">
+              Date of Issuance
+              <i class="bi bi-caret-{{ 'up' if (sort == 'date' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'date' %} opacity-25{% endif %}"></i>
+            </a>
+          </th>
+          <th>
+            <a href="{{ sort_url('company') }}" class="sort-link">
+              Company Name
+              <i class="bi bi-caret-{{ 'up' if (sort == 'company' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'company' %} opacity-25{% endif %}"></i>
+            </a>
+          </th>
+          <th>
+            <a href="{{ sort_url('person') }}" class="sort-link">
+              Responsible Person
+              <i class="bi bi-caret-{{ 'up' if (sort == 'person' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'person' %} opacity-25{% endif %}"></i>
+            </a>
+          </th>
+          <th>
+            <a href="{{ sort_url('regulation') }}" class="sort-link">
+              Waivered Regulation
+              <i class="bi bi-caret-{{ 'up' if (sort == 'regulation' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'regulation' %} opacity-25{% endif %}"></i>
+            </a>
+          </th>
+          <th class="text-center">PDF</th>
         </tr>
       </thead>
       <tbody>
         {% for w in waivers %}
           <tr>
-            <td><a href="/waiver/{{ w.id }}">{{ (w.waiver_number or '—') | clean_waiver_number }}</a></td>
+            <td>
+              <a href="/waiver/{{ w.id }}">{{ (w.waiver_number or '—') | clean_waiver_number }}</a>
+            </td>
             <td>{{ w.date_of_issuance or '—' }}</td>
             <td>{{ w.company_name or '—' }}</td>
             <td>{{ (w.responsible_person or '—') | clean_person }}</td>
             <td>{{ w.waivered_regulation or '—' }}</td>
+            <td class="text-center">
+              {% if w.pdf_url %}
+                <a href="{{ w.pdf_url }}" target="_blank" rel="noopener"
+                   class="btn btn-sm btn-outline-primary" title="Open PDF">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
 
-    <div class="pagination">
-      {% if page > 1 %}
-        <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}">&laquo; Prev</a>
-      {% endif %}
+  {# ── Pagination ──────────────────────────────────────────────────── #}
+  {% if total_pages > 1 %}
+    <nav class="mt-3" aria-label="Waiver pages">
+      <ul class="pagination pagination-sm flex-wrap mb-0">
 
-      {% set start = [1, page - 2] | max %}
-      {% set end   = [total_pages, page + 2] | min %}
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link" href="{{ page_url(page - 1) }}">&laquo;</a>
+        </li>
 
-      {% if start > 1 %}
-        <a href="/?page=1{% if q %}&q={{ q }}{% endif %}">1</a>
-        {% if start > 2 %}<span>&hellip;</span>{% endif %}
-      {% endif %}
+        {% set start = [1, page - 2] | max %}
+        {% set end   = [total_pages, page + 2] | min %}
 
-      {% for p in range(start, end + 1) %}
-        {% if p == page %}
-          <span class="current">{{ p }}</span>
-        {% else %}
-          <a href="/?page={{ p }}{% if q %}&q={{ q }}{% endif %}">{{ p }}</a>
+        {% if start > 1 %}
+          <li class="page-item"><a class="page-link" href="{{ page_url(1) }}">1</a></li>
+          {% if start > 2 %}
+            <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+          {% endif %}
         {% endif %}
-      {% endfor %}
 
-      {% if end < total_pages %}
-        {% if end < total_pages - 1 %}<span>&hellip;</span>{% endif %}
-        <a href="/?page={{ total_pages }}{% if q %}&q={{ q }}{% endif %}">{{ total_pages }}</a>
-      {% endif %}
+        {% for p in range(start, end + 1) %}
+          <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="{{ page_url(p) }}">{{ p }}</a>
+          </li>
+        {% endfor %}
 
-      {% if page < total_pages %}
-        <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}">Next &raquo;</a>
-      {% endif %}
-    </div>
+        {% if end < total_pages %}
+          {% if end < total_pages - 1 %}
+            <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+          {% endif %}
+          <li class="page-item"><a class="page-link" href="{{ page_url(total_pages) }}">{{ total_pages }}</a></li>
+        {% endif %}
 
-  {% else %}
-    <div class="no-results">
-      {% if q %}
-        No waivers matched "<strong>{{ q }}</strong>".
-      {% else %}
-        No waivers in database yet. Run <code>python scraper.py</code> first.
-      {% endif %}
-    </div>
+        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+          <a class="page-link" href="{{ page_url(page + 1) }}">&raquo;</a>
+        </li>
+
+      </ul>
+    </nav>
   {% endif %}
+
+{% else %}
+  <div class="alert alert-secondary text-center">
+    {% if date or person or company or regulation %}
+      No waivers matched your search criteria.
+    {% else %}
+      No waivers in database yet. Run <code>python scraper.py</code> first.
+    {% endif %}
+  </div>
+{% endif %}
 
 {% endblock %}
