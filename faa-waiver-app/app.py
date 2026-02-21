@@ -37,6 +37,30 @@ def clean_person_filter(value):
     return re.sub(r"\s*\(pdf\)\s*$", "", value, flags=re.IGNORECASE).strip()
 
 
+_FOOTER_LINE = re.compile(
+    r"^\s*("
+    r"page\s+\d+\s+of\s+\d+"          # "Page 1 of 5"
+    r"|page\s+\d+"                      # "Page 1"
+    r"|\d+"                             # bare page number
+    r"|federal\s+aviation\s+administration"  # repeated header
+    r"|www\.faa\.gov"                   # URL footers
+    r")\s*$",
+    re.IGNORECASE,
+)
+
+
+@app.template_filter("clean_pdf_text")
+def clean_pdf_text_filter(value):
+    """Clean up PDF-extracted text for display only; original data is unchanged."""
+    if not value:
+        return value
+    lines = value.splitlines()
+    cleaned = [line for line in lines if not _FOOTER_LINE.match(line)]
+    # Collapse runs of more than one blank line into a single blank line
+    result = re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned))
+    return result.strip()
+
+
 @app.before_request
 def open_db():
     g.db = SessionLocal()
