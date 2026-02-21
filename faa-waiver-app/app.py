@@ -1,6 +1,7 @@
 import os
 import re
 from flask import Flask, render_template, request, abort, send_from_directory, g
+from sqlalchemy import text
 from database import SessionLocal, Waiver, init_db
 
 app = Flask(__name__)
@@ -97,6 +98,54 @@ def waiver_detail(id):
     if waiver is None:
         abort(404)
     return render_template("waiver.html", waiver=waiver)
+
+
+def _snippet(pdf_text, keyword, max_len=300):
+    if not pdf_text:
+        return ""
+    idx = pdf_text.lower().find(keyword.lower())
+    if idx == -1:
+        text_preview = pdf_text[:max_len]
+        return text_preview + ("…" if len(pdf_text) > max_len else "")
+    start = max(0, idx - max_len // 2)
+    end = min(len(pdf_text), start + max_len)
+    snippet = pdf_text[start:end]
+    return ("…" if start > 0 else "") + snippet + ("…" if end < len(pdf_text) else "")
+
+
+@app.route("/search")
+def search():
+    keyword = request.args.get("keyword", "").strip()
+    results = []
+    error = None
+    if keyword:
+        try:
+            rows = g.db.execute(
+                text("""
+                    SELECT w.id, w.waiver_number, w.date_of_issuance,
+                           w.responsible_person, w.company_name,
+                           w.waivered_regulation, w.pdf_url, w.pdf_text
+                    FROM waivers_fts
+                    JOIN waivers w ON waivers_fts.rowid = w.id
+                    WHERE waivers_fts MATCH :kw
+                    ORDER BY rank
+                """),
+                {"kw": keyword},
+            ).fetchall()
+            for row in rows:
+                results.append({
+                    "id": row.id,
+                    "waiver_number": row.waiver_number,
+                    "date_of_issuance": row.date_of_issuance,
+                    "responsible_person": row.responsible_person,
+                    "company_name": row.company_name,
+                    "waivered_regulation": row.waivered_regulation,
+                    "pdf_url": row.pdf_url,
+                    "snippet": _snippet(row.pdf_text, keyword),
+                })
+        except Exception as e:
+            error = str(e)
+    return render_template("search_results.html", results=results, keyword=keyword, error=error)
 
 
 @app.route("/pdf/<path:filename>")
