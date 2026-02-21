@@ -1,8 +1,10 @@
 import os
 import re
-from flask import Flask, render_template, request, abort, send_from_directory, g
+from flask import Flask, render_template, request, abort, send_from_directory, g, jsonify
 from sqlalchemy import text
-from database import SessionLocal, Waiver, init_db, setup_fts
+from database import SessionLocal, Waiver, init_db, setup_fts, populate_fts
+from scraper import scrape_waivers
+from extract_text import extract_text_from_pdfs
 
 app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
@@ -184,6 +186,21 @@ def search():
         except Exception as e:
             error = str(e)
     return render_template("search_results.html", results=results, keyword=keyword, error=error)
+
+
+@app.route("/refresh", methods=["POST"])
+def refresh():
+    print("[Refresh] Step 1: Scraping for new waivers from FAA table...")
+    new_waivers = scrape_waivers()
+
+    print("[Refresh] Step 2: Extracting text from new PDFs...")
+    pdfs_processed = extract_text_from_pdfs()
+
+    print("[Refresh] Step 3: Rebuilding FTS index...")
+    populate_fts()
+
+    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed.")
+    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed})
 
 
 @app.route("/pdf/<path:filename>")
