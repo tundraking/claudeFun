@@ -27,12 +27,12 @@
 
 {% block content %}
 <style>
-  .chevron-toggle .bi-chevron-down {
+  .chevron-toggle .bi-chevron-right {
     display: inline-block;
     transition: transform .2s ease;
   }
-  .chevron-toggle[aria-expanded="true"] .bi-chevron-down {
-    transform: rotate(180deg);
+  .chevron-toggle .bi-chevron-right.chevron-expanded {
+    transform: rotate(90deg);
   }
 </style>
 
@@ -181,7 +181,7 @@
                         data-bs-target="#summary-{{ w.id }}"
                         aria-expanded="false"
                         aria-controls="summary-{{ w.id }}">
-                  <i class="bi bi-chevron-down"></i>
+                  <i class="bi bi-chevron-right"></i>
                 </button>
               </td>
               <td>
@@ -282,6 +282,18 @@
   });
 
   applyFilters();
+
+  // Rotate chevron on Bootstrap collapse show/hide events.
+  document.querySelectorAll('.collapse[id^="summary-"]').forEach(collapseEl => {
+    collapseEl.addEventListener('show.bs.collapse', function () {
+      const btn = document.querySelector(`[data-bs-target="#${this.id}"]`);
+      btn?.querySelector('.bi-chevron-right')?.classList.add('chevron-expanded');
+    });
+    collapseEl.addEventListener('hide.bs.collapse', function () {
+      const btn = document.querySelector(`[data-bs-target="#${this.id}"]`);
+      btn?.querySelector('.bi-chevron-right')?.classList.remove('chevron-expanded');
+    });
+  });
 })();
 </script>
 {% endblock %}
