@@ -26,9 +26,24 @@ Return a JSON object with exactly these fields:
 
 Return only raw JSON with no markdown formatting, no code fences, and no additional explanation."""
 
+# Matches references to physical prop-guard / hardware shielding that are NOT
+# operational airspace shielding concepts and should be excluded.
+HARDWARE_SHIELD_RE = re.compile(
+    r"shielding\s+for\s+rotating"
+    r"|shield\s+or\s+prevent\s+rotating"
+    r"|rotating\s+(?:components|parts)"
+    r"|prop\s+guard"
+    r"|laceration",
+    re.IGNORECASE,
+)
+
 
 def extract_shielding_blocks(pdf_text):
     """Split pdf_text at top-level numbered sections and return those containing shielding keywords.
+
+    Only sections whose heading (first two lines) mentions a shielding keyword are
+    kept. Sections that reference physical hardware shielding — prop guards, rotating
+    components, laceration protection — are excluded regardless of keyword presence.
 
     Returns:
         (blocks, types) where blocks is a list of raw text strings and types is a list
@@ -45,7 +60,16 @@ def extract_shielding_blocks(pdf_text):
         part = part.strip()
         if not part:
             continue
-        if not re.search(r"\bshield(?:ed|ing)?\b", part, re.IGNORECASE):
+
+        # Check only the heading zone (first two lines) so that sections which
+        # merely mention "shielding" somewhere in their body are not captured.
+        heading_zone = "\n".join(part.split("\n")[:2])
+
+        if not re.search(r"\bshield(?:ed|ing)?\b", heading_zone, re.IGNORECASE):
+            continue
+
+        # Skip physical hardware shielding (prop guards, rotating components).
+        if HARDWARE_SHIELD_RE.search(heading_zone):
             continue
 
         shielding_blocks.append(part)
