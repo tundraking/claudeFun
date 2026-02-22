@@ -26,6 +26,15 @@
 {% endmacro %}
 
 {% block content %}
+<style>
+  .chevron-toggle .bi-chevron-right {
+    display: inline-block;
+    transition: transform .2s ease;
+  }
+  .chevron-toggle .bi-chevron-right.chevron-expanded {
+    transform: rotate(90deg);
+  }
+</style>
 
   <h4 class="mb-4 fw-bold">
     <i class="bi bi-bar-chart-line me-2"></i>Waiver Analysis
@@ -148,6 +157,7 @@
       <table class="table table-bordered table-hover align-middle mb-0 bg-white" id="analysis-table">
         <thead>
           <tr>
+            <th style="width:2rem;"></th>
             <th>Waiver Number</th>
             <th>Company Name</th>
             <th>Date of Issuance</th>
@@ -165,6 +175,15 @@
               data-docking="{{ bool_attr(w.docking_station) }}"
               data-location="{{ bool_attr(w.location_based) }}"
             >
+              <td class="text-center">
+                <button class="btn btn-sm btn-link p-0 text-secondary chevron-toggle"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#summary-{{ w.id }}"
+                        aria-expanded="false"
+                        aria-controls="summary-{{ w.id }}">
+                  <i class="bi bi-chevron-right"></i>
+                </button>
+              </td>
               <td>
                 <a href="/waiver/{{ w.waiver_number | clean_waiver_number }}">
                   {{ (w.waiver_number or '—') | clean_waiver_number }}
@@ -192,6 +211,19 @@
               </td>
               <td class="text-center">{{ vis_badge(w.visibility_minimum) }}</td>
             </tr>
+            <tr class="collapse-row">
+              <td colspan="9" class="p-0 border-0">
+                <div class="collapse" id="summary-{{ w.id }}">
+                  <div class="px-4 py-3 bg-light border-bottom">
+                    {% if w.ai_summary %}
+                      {{ w.ai_summary }}
+                    {% else %}
+                      <span class="text-muted fst-italic">No AI summary available.</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -208,7 +240,7 @@
 {% block scripts %}
 <script>
 (function () {
-  const rows = Array.from(document.querySelectorAll('#analysis-table tbody tr'));
+  const rows = Array.from(document.querySelectorAll('#analysis-table tbody tr[data-remote]'));
   const countEl = document.getElementById('result-count');
   const noResultsMsg = document.getElementById('no-results-msg');
 
@@ -228,6 +260,11 @@
                    docking.includes(row.dataset.docking) &&
                    location.includes(row.dataset.location);
       row.style.display = show ? '' : 'none';
+      // Keep the paired collapse row in sync so it doesn't orphan when hidden.
+      const collapseRow = row.nextElementSibling;
+      if (collapseRow && collapseRow.classList.contains('collapse-row')) {
+        collapseRow.style.display = show ? '' : 'none';
+      }
       if (show) visible++;
     });
 
@@ -245,6 +282,18 @@
   });
 
   applyFilters();
+
+  // Rotate chevron on Bootstrap collapse show/hide events.
+  document.querySelectorAll('.collapse[id^="summary-"]').forEach(collapseEl => {
+    collapseEl.addEventListener('show.bs.collapse', function () {
+      const btn = document.querySelector(`[data-bs-target="#${this.id}"]`);
+      btn?.querySelector('.bi-chevron-right')?.classList.add('chevron-expanded');
+    });
+    collapseEl.addEventListener('hide.bs.collapse', function () {
+      const btn = document.querySelector(`[data-bs-target="#${this.id}"]`);
+      btn?.querySelector('.bi-chevron-right')?.classList.remove('chevron-expanded');
+    });
+  });
 })();
 </script>
 {% endblock %}
