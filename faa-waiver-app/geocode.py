@@ -9,17 +9,46 @@ NOMINATIM_HEADERS = {
 }
 SLEEP_SECONDS = 1.1
 
-SECTION_HEADER_RE = re.compile(
-    r"^(?:[A-Z][A-Z\s]{2,}|.*\b(?:CONDITION|WAIVER|SECTION|FAA)\b|\d+)$"
+# Only stop on lines that are strongly section-header-like.
+# Require specific known keywords — not just any all-caps text, since company
+# names, state names, and document titles are also all-caps.
+SECTION_KEYWORDS_RE = re.compile(
+    r"\b(CONDITIONS?|LIMITATIONS?|AUTHORIZED\s+AREA|OPERATIONAL|REQUIREMENTS?|SECTION)\b",
+    re.IGNORECASE,
 )
+
+# A lone number or numbered-section like "1." or "1)" — classic section header
+LONE_NUMBER_RE = re.compile(r"^\d+[\.\)]?\s*$")
+
+# Looks like a US ZIP code — a good indicator of an address line
+ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+
+# Looks like a street address — starts with digits followed by a word
+STREET_RE = re.compile(r"^\d+\s+\w")
+
+# Known boilerplate titles at the top of FAA waiver PDFs to skip rather than stop on
+BOILERPLATE_RE = re.compile(
+    r"^\s*(certificate\s+of\s+(waiver|authorization)|faa\s+form\s+\d|"
+    r"part\s+107|unmanned\s+aircraft|uas\b)",
+    re.IGNORECASE,
+)
+
+
+def is_section_header(line):
+    """Return True if the line is a section boundary, not part of the address block."""
+    if LONE_NUMBER_RE.match(line):
+        return True
+    if SECTION_KEYWORDS_RE.search(line):
+        return True
+    return False
 
 
 def extract_address(pdf_text):
     """Extract an address from the first 15 lines of pdf_text.
 
-    Skips line 0 (waiver number header), then collects non-empty lines until
-    hitting a line that looks like a section header. Returns a comma-joined
-    string, or None if nothing was collected.
+    Skips line 0 (waiver number header) and known boilerplate titles, then
+    collects non-empty lines until a section header is detected. Returns the
+    most address-like subset of collected lines joined with commas, or None.
     """
     lines = pdf_text.splitlines()[:15]
     collected = []
@@ -27,10 +56,22 @@ def extract_address(pdf_text):
         stripped = line.strip()
         if not stripped:
             continue
-        if SECTION_HEADER_RE.match(stripped):
+        if is_section_header(stripped):
             break
+        # Skip known FAA boilerplate document titles rather than stopping on them
+        if BOILERPLATE_RE.match(stripped):
+            continue
         collected.append(stripped)
-    return ", ".join(collected) if collected else None
+
+    if not collected:
+        return None
+
+    # Prefer lines that look like actual postal address components (street or ZIP).
+    # This avoids sending the person's name or company name to Nominatim.
+    address_lines = [l for l in collected if ZIP_RE.search(l) or STREET_RE.match(l)]
+    query_lines = address_lines if address_lines else collected
+
+    return ", ".join(query_lines) + ", USA"
 
 
 def geocode_address(address):
@@ -71,7 +112,11 @@ def run():
         for waiver in waivers:
             address = extract_address(waiver.pdf_text)
             if not address:
+                # Print first 5 lines to help diagnose why extraction failed
+                preview = waiver.pdf_text.splitlines()[:5]
                 print(f"[SKIP] {waiver.waiver_number} — no address extracted")
+                for i, l in enumerate(preview):
+                    print(f"       line {i}: {l!r}")
                 skipped += 1
                 continue
 
