@@ -5,19 +5,18 @@
 {% block content %}
 <div class="card mb-3">
   <div class="card-body py-2">
-    <form id="filter-form" class="row g-2 align-items-end">
+    <div class="row g-2 align-items-end">
       <div class="col-auto" style="min-width:280px;">
         <label class="form-label mb-1 small fw-semibold">
           Year range: <span id="year-range-label">…</span>
         </label>
         <div id="year-slider" style="margin: 6px 8px 0;"></div>
       </div>
-      <div class="col-auto">
-        <label class="form-label mb-1 small fw-semibold" for="regulation">Regulation (e.g. 107.31)</label>
-        <input type="text" id="regulation" name="regulation" class="form-control form-control-sm"
-               placeholder="107.31" style="width:140px;">
+      <div class="col-auto" style="min-width:260px;">
+        <label class="form-label mb-1 small fw-semibold" for="regulation">Regulation</label>
+        <select id="regulation" name="regulation" multiple></select>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
@@ -26,8 +25,10 @@
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Choices.js/10.2.0/choices.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Choices.js/10.2.0/choices.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
@@ -142,6 +143,7 @@ function buildLayer(countByState, buckets) {
 
 const sliderEl = document.getElementById('year-slider');
 const yearLabelEl = document.getElementById('year-range-label');
+let choicesInstance = null;
 
 function applyFilters() {
   if (!sliderEl.noUiSlider) return;
@@ -152,8 +154,10 @@ function applyFilters() {
   const params = new URLSearchParams();
   params.set('date_from', `${fromYear}-01-01`);
   params.set('date_to', `${toYear}-12-31`);
-  const regulation = document.getElementById('regulation').value.trim();
-  if (regulation) params.set('regulation', regulation);
+  const selectedRegs = choicesInstance ? choicesInstance.getValue(true) : [];
+  if (selectedRegs.length > 0) {
+    params.set('regulation', selectedRegs.join(','));
+  }
 
   fetch('/api/waivers/by-state?' + params.toString())
     .then(r => r.json())
@@ -189,11 +193,6 @@ function applyFilters() {
     });
 }
 
-document.getElementById('filter-form').addEventListener('submit', function (e) {
-  e.preventDefault();
-  applyFilters();
-});
-
 // Extract the 4-digit year from a human-readable date string like "January 15, 2020"
 function parseYear(dateStr) {
   if (!dateStr) return null;
@@ -201,10 +200,11 @@ function parseYear(dateStr) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// Fetch metadata to initialize the slider, then load the map
+// Fetch metadata to initialize both controls, then load the map
 fetch('/api/waivers/meta')
   .then(r => r.json())
   .then(meta => {
+    // --- Year range slider ---
     let minYear = parseYear(meta.date_range && meta.date_range.min);
     let maxYear = parseYear(meta.date_range && meta.date_range.max);
     if (!minYear || !maxYear) {
@@ -227,6 +227,29 @@ fetch('/api/waivers/meta')
     });
 
     sliderEl.noUiSlider.on('change', function () {
+      applyFilters();
+    });
+
+    // --- Regulation multi-select ---
+    const selectEl = document.getElementById('regulation');
+    for (const reg of (meta.regulations || [])) {
+      const opt = document.createElement('option');
+      opt.value = reg;
+      opt.textContent = reg;
+      selectEl.appendChild(opt);
+    }
+
+    choicesInstance = new Choices(selectEl, {
+      removeItemButton: true,
+      placeholder: true,
+      placeholderValue: 'All regulations',
+      searchEnabled: true,
+      searchPlaceholderValue: 'Search…',
+      shouldSort: false,
+      itemSelectText: '',
+    });
+
+    selectEl.addEventListener('change', function () {
       applyFilters();
     });
 

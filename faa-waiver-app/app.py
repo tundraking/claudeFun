@@ -267,6 +267,7 @@ def waivers_by_state():
     date_from = _parse_date_ymd(request.args.get("date_from", "").strip())
     date_to = _parse_date_ymd(request.args.get("date_to", "").strip())
     regulation = request.args.get("regulation", "").strip()
+    regulations = [r.strip() for r in regulation.split(",") if r.strip()] if regulation else []
 
     # Pull every waiver that has a state; filter in Python because
     # date_of_issuance is stored as a human-readable string.
@@ -274,8 +275,8 @@ def waivers_by_state():
         g.db.query(Waiver.state, Waiver.date_of_issuance, Waiver.waivered_regulation)
         .filter(Waiver.state.isnot(None))
     )
-    if regulation:
-        query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+    if regulations:
+        query = query.filter(Waiver.waivered_regulation.in_(regulations))
 
     counts = {}
     for row in query.all():
