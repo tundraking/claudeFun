@@ -198,6 +198,17 @@ def search():
     return render_template("search_results.html", results=results, keyword=keyword, error=error)
 
 
+@app.route("/analysis")
+def analysis():
+    waivers = (
+        g.db.query(Waiver)
+        .filter(Waiver.ai_processed == True)
+        .order_by(Waiver.date_of_issuance.desc())
+        .all()
+    )
+    return render_template("analysis.html", waivers=waivers)
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh():
     print("[Refresh] Step 1: Scraping for new waivers from FAA table...")
