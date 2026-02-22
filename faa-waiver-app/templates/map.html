@@ -5,16 +5,24 @@
 {% block content %}
 <div class="card mb-3">
   <div class="card-body py-2">
-    <div class="row g-2 align-items-end">
+    <div class="row g-3 align-items-start">
       <div class="col-auto" style="min-width:280px;">
         <label class="form-label mb-1 small fw-semibold">
           Year range: <span id="year-range-label">…</span>
         </label>
-        <div id="year-slider" style="margin: 6px 8px 0;"></div>
+        <div id="year-slider" style="margin: 10px 8px 0;"></div>
       </div>
-      <div class="col-auto" style="min-width:260px;">
-        <label class="form-label mb-1 small fw-semibold" for="regulation">Regulation</label>
-        <select id="regulation" name="regulation" multiple></select>
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold">Regulation</label>
+        <div id="regulation-checks" class="d-flex flex-wrap" style="gap:4px 14px; max-width:420px;">
+          {% for reg in ['107.25','107.29','107.31','107.33','107.35','107.37','107.39','107.41','107.51','107.145'] %}
+          <div class="form-check mb-0">
+            <input class="form-check-input reg-check" type="checkbox"
+                   id="reg-{{ reg }}" value="{{ reg }}">
+            <label class="form-check-label small" for="reg-{{ reg }}">{{ reg }}</label>
+          </div>
+          {% endfor %}
+        </div>
       </div>
     </div>
   </div>
@@ -26,10 +34,8 @@
 {% endblock %}
 
 {% block scripts %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Choices.js/10.2.0/choices.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Choices.js/10.2.0/choices.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
@@ -144,9 +150,12 @@ function buildLayer(countByState, buckets) {
 
 const sliderEl = document.getElementById('year-slider');
 const yearLabelEl = document.getElementById('year-range-label');
-let choicesInstance = null;
 let sliderMinYear = null;
 let sliderMaxYear = null;
+
+function getSelectedRegs() {
+  return Array.from(document.querySelectorAll('.reg-check:checked')).map(el => el.value);
+}
 
 function updateFilterSummary(fromYear, toYear, selectedRegs, total, stateCount) {
   const bar = document.getElementById('filter-bar');
@@ -183,7 +192,7 @@ function clearYearFilter() {
 }
 
 function clearRegFilter() {
-  choicesInstance.removeActiveItems();
+  document.querySelectorAll('.reg-check').forEach(el => { el.checked = false; });
   applyFilters();
 }
 
@@ -199,7 +208,7 @@ function applyFilters() {
     params.set('date_from', `${fromYear}-01-01`);
     params.set('date_to', `${toYear}-12-31`);
   }
-  const selectedRegs = choicesInstance ? choicesInstance.getValue(true) : [];
+  const selectedRegs = getSelectedRegs();
   if (selectedRegs.length > 0) {
     params.set('regulation', selectedRegs.join(','));
   }
@@ -240,6 +249,9 @@ function applyFilters() {
     });
 }
 
+// Fire applyFilters whenever any regulation checkbox changes
+document.getElementById('regulation-checks').addEventListener('change', applyFilters);
+
 // Extract the 4-digit year from a human-readable date string like "January 15, 2020"
 function parseYear(dateStr) {
   if (!dateStr) return null;
@@ -247,11 +259,10 @@ function parseYear(dateStr) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// Fetch metadata to initialize both controls, then load the map
+// Fetch metadata to initialize the slider, then load the map
 fetch('/api/waivers/meta')
   .then(r => r.json())
   .then(meta => {
-    // --- Year range slider ---
     let minYear = parseYear(meta.date_range && meta.date_range.min);
     let maxYear = parseYear(meta.date_range && meta.date_range.max);
     if (!minYear || !maxYear) {
@@ -277,29 +288,6 @@ fetch('/api/waivers/meta')
     });
 
     sliderEl.noUiSlider.on('change', function () {
-      applyFilters();
-    });
-
-    // --- Regulation multi-select ---
-    const selectEl = document.getElementById('regulation');
-    for (const reg of (meta.regulations || [])) {
-      const opt = document.createElement('option');
-      opt.value = reg;
-      opt.textContent = reg;
-      selectEl.appendChild(opt);
-    }
-
-    choicesInstance = new Choices(selectEl, {
-      removeItemButton: true,
-      placeholder: true,
-      placeholderValue: 'All regulations',
-      searchEnabled: true,
-      searchPlaceholderValue: 'Search…',
-      shouldSort: false,
-      itemSelectText: '',
-    });
-
-    selectEl.addEventListener('change', function () {
       applyFilters();
     });
 
