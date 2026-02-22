@@ -31,6 +31,7 @@ class Waiver(Base):
     ai_processed = Column(Boolean, default=False, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    state = Column(String, nullable=True)
 
 
 def init_db():
@@ -73,6 +74,7 @@ def migrate_db():
         ("ai_processed", "BOOLEAN DEFAULT 0"),
         ("latitude", "REAL"),
         ("longitude", "REAL"),
+        ("state", "TEXT"),
     ]
     for col_name, col_type in new_columns:
         try:
