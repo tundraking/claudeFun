@@ -2,7 +2,7 @@ import os
 import re
 from flask import Flask, render_template, request, abort, send_from_directory, g, jsonify
 from sqlalchemy import text
-from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, populate_fts
+from database import SessionLocal, Waiver, ShieldingAnalysis, init_db, migrate_db, setup_fts, populate_fts
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
 from geocode import geocode_new_waivers
@@ -341,6 +341,48 @@ def waivers_meta():
     regulations = sorted(reg_codes)
 
     return jsonify({"date_range": date_range, "regulations": regulations})
+
+
+@app.route("/shielding")
+def shielding():
+    import json as _json
+    records = (
+        g.db.query(ShieldingAnalysis)
+        .order_by(ShieldingAnalysis.waiver_number)
+        .all()
+    )
+    rows = []
+    for rec in records:
+        parsed = None
+        if rec.structured_data:
+            try:
+                parsed = _json.loads(rec.structured_data)
+            except (ValueError, TypeError):
+                parsed = None
+
+        shielding_types = []
+        altitude_limits = []
+        distance_limits = []
+        if parsed and isinstance(parsed, dict):
+            shielding_types = parsed.get("shielding_types") or []
+            for prov in (parsed.get("provisions") or []):
+                alt = prov.get("altitude_limits")
+                dist = prov.get("distance_limits")
+                if alt:
+                    altitude_limits.append(alt)
+                if dist:
+                    distance_limits.append(dist)
+
+        rows.append({
+            "waiver_number": rec.waiver_number,
+            "shielding_types": shielding_types,
+            "altitude_limits": altitude_limits,
+            "distance_limits": distance_limits,
+            "raw_blocks": rec.raw_blocks or "",
+            "structured_json": _json.dumps(parsed, indent=2) if parsed else (rec.structured_data or ""),
+            "ollama_processed": rec.ollama_processed,
+        })
+    return render_template("shielding.html", rows=rows)
 
 
 @app.route("/refresh", methods=["POST"])

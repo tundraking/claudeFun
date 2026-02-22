@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Shielding Analysis — FAA Waiver Browser{% endblock %}
+
+{% block content %}
+<style>
+  .chevron-toggle .bi-chevron-right {
+    display: inline-block;
+    transition: transform .2s ease;
+  }
+  .chevron-toggle .bi-chevron-right.chevron-expanded {
+    transform: rotate(90deg);
+  }
+  .detail-block {
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.82em;
+    background: #f9f9f9;
+    border: 1px solid #dee2e6;
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+</style>
+
+<h4 class="mb-4 fw-bold">
+  <i class="bi bi-shield-check me-2"></i>Shielding Analysis
+</h4>
+
+{% if not rows %}
+  <div class="alert alert-warning">
+    No shielding analysis records found. Run <code>extract_shielding.py</code> first.
+  </div>
+{% else %}
+
+  <p class="text-muted small mb-3">{{ rows | length }} waiver{{ 's' if rows | length != 1 }} with shielding provisions</p>
+
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered table-hover align-middle mb-0 bg-white" id="shielding-table">
+      <thead>
+        <tr>
+          <th style="width:2rem;"></th>
+          <th>Waiver Number</th>
+          <th>Shielding Types</th>
+          <th>Altitude Limits</th>
+          <th>Distance Limits</th>
+          <th style="width:6rem;" class="text-center">Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set loop_id = loop.index %}
+          <tr>
+            <td class="text-center">
+              <button class="btn btn-sm btn-link p-0 text-secondary chevron-toggle"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#detail-{{ loop_id }}"
+                      aria-expanded="false"
+                      aria-controls="detail-{{ loop_id }}">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+            </td>
+            <td class="text-nowrap">
+              <a href="/waiver/{{ row.waiver_number | clean_waiver_number }}">
+                {{ (row.waiver_number or '—') | clean_waiver_number }}
+              </a>
+            </td>
+            <td>
+              {% if row.shielding_types %}
+                {% for t in row.shielding_types %}
+                  <span class="badge bg-primary me-1 mb-1">{{ t }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.altitude_limits %}
+                {% for a in row.altitude_limits %}
+                  <div class="small{% if not loop.last %} mb-1{% endif %}">{{ a }}</div>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.distance_limits %}
+                {% for d in row.distance_limits %}
+                  <div class="small{% if not loop.last %} mb-1{% endif %}">{{ d }}</div>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-secondary chevron-toggle"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#detail-{{ loop_id }}"
+                      aria-expanded="false"
+                      aria-controls="detail-{{ loop_id }}">
+                Details
+              </button>
+            </td>
+          </tr>
+          <tr class="collapse-row">
+            <td colspan="6" class="p-0 border-0">
+              <div class="collapse" id="detail-{{ loop_id }}">
+                <div class="px-4 py-3 bg-light border-bottom">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <p class="fw-semibold small text-uppercase text-muted mb-1">Raw Blocks</p>
+                      <div class="detail-block">{{ row.raw_blocks or '(none)' }}</div>
+                    </div>
+                    <div class="col-md-6">
+                      <p class="fw-semibold small text-uppercase text-muted mb-1">Structured JSON</p>
+                      <div class="detail-block">{{ row.structured_json or '(none)' }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  document.querySelectorAll('.collapse[id^="detail-"]').forEach(function (collapseEl) {
+    collapseEl.addEventListener('show.bs.collapse', function () {
+      document.querySelectorAll('[data-bs-target="#' + this.id + '"]').forEach(function (btn) {
+        btn.querySelector('.bi-chevron-right')?.classList.add('chevron-expanded');
+      });
+    });
+    collapseEl.addEventListener('hide.bs.collapse', function () {
+      document.querySelectorAll('[data-bs-target="#' + this.id + '"]').forEach(function (btn) {
+        btn.querySelector('.bi-chevron-right')?.classList.remove('chevron-expanded');
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}
