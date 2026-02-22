@@ -198,6 +198,30 @@ def search():
     return render_template("search_results.html", results=results, keyword=keyword, error=error)
 
 
+@app.route("/map")
+def map_view():
+    return render_template("map.html")
+
+
+@app.route("/api/waivers/geo")
+def waivers_geo():
+    waivers = (
+        g.db.query(Waiver)
+        .filter(Waiver.latitude.isnot(None), Waiver.longitude.isnot(None))
+        .all()
+    )
+    return jsonify([
+        {
+            "waiver_number": w.waiver_number,
+            "company_name": w.company_name,
+            "responsible_person": w.responsible_person,
+            "latitude": w.latitude,
+            "longitude": w.longitude,
+        }
+        for w in waivers
+    ])
+
+
 @app.route("/analysis")
 def analysis():
     waivers = (
