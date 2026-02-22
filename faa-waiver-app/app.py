@@ -276,7 +276,8 @@ def waivers_by_state():
         .filter(Waiver.state.isnot(None))
     )
     if regulations:
-        query = query.filter(Waiver.waivered_regulation.in_(regulations))
+        from sqlalchemy import or_
+        query = query.filter(or_(*(Waiver.waivered_regulation.ilike(f"%{r}%") for r in regulations)))
 
     counts = {}
     for row in query.all():
