@@ -20,6 +20,7 @@
   </div>
 </div>
 
+<p id="filter-bar" class="small mb-2" style="display:none;"></p>
 <div id="map" style="width:100%; height:68vh; border-radius:6px; border:1px solid #dee2e6;"></div>
 <p class="text-muted small mt-2 mb-0" id="map-summary"></p>
 {% endblock %}
@@ -144,6 +145,47 @@ function buildLayer(countByState, buckets) {
 const sliderEl = document.getElementById('year-slider');
 const yearLabelEl = document.getElementById('year-range-label');
 let choicesInstance = null;
+let sliderMinYear = null;
+let sliderMaxYear = null;
+
+function updateFilterSummary(fromYear, toYear, selectedRegs, total, stateCount) {
+  const bar = document.getElementById('filter-bar');
+  const yearActive = sliderMinYear !== null && (fromYear !== sliderMinYear || toYear !== sliderMaxYear);
+  const regsActive = selectedRegs.length > 0;
+
+  if (!yearActive && !regsActive) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const xBtn = (fn) =>
+    `<button onclick="${fn}()" style="border:none;background:none;padding:0 0 0 3px;line-height:1;cursor:pointer;color:#6c757d;" title="Clear filter">&#x2715;</button>`;
+
+  const parts = [];
+  if (yearActive) {
+    parts.push(`${fromYear}–${toYear}${xBtn('clearYearFilter')}`);
+  }
+  if (regsActive) {
+    parts.push(`Regulations: ${selectedRegs.join(', ')}${xBtn('clearRegFilter')}`);
+  }
+
+  const countText = total > 0
+    ? `${total.toLocaleString()} waiver${total !== 1 ? 's' : ''} across ${stateCount} state${stateCount !== 1 ? 's' : ''}`
+    : 'no waivers match';
+
+  bar.innerHTML = `<span class="text-muted fw-semibold">Filtered:</span> ${parts.join(' · ')} · ${countText}`;
+  bar.style.display = '';
+}
+
+function clearYearFilter() {
+  sliderEl.noUiSlider.set([sliderMinYear, sliderMaxYear]);
+  applyFilters();
+}
+
+function clearRegFilter() {
+  choicesInstance.removeActiveItems();
+  applyFilters();
+}
 
 function applyFilters() {
   if (!sliderEl.noUiSlider) return;
@@ -190,6 +232,8 @@ function applyFilters() {
         total > 0
           ? `Showing ${total.toLocaleString()} waivers across ${stateCount} state${stateCount !== 1 ? 's' : ''}`
           : 'No waivers match the current filters.';
+
+      updateFilterSummary(fromYear, toYear, selectedRegs, total, stateCount);
     });
 }
 
@@ -214,6 +258,9 @@ fetch('/api/waivers/meta')
     if (minYear >= maxYear) {
       maxYear = minYear + 1;
     }
+
+    sliderMinYear = minYear;
+    sliderMaxYear = maxYear;
 
     noUiSlider.create(sliderEl, {
       start: [minYear, maxYear],
