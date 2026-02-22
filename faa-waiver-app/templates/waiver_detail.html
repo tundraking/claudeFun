@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{{ waiver.waiver_number | clean_waiver_number }} — FAA Waiver Browser{% endblock %}
+
+{% block content %}
+
+  <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary mb-3">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+
+  {# ── Header card ─────────────────────────────────────────────────────── #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header" style="background-color: #003366; color: white;">
+      <h5 class="mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Waiver {{ waiver.waiver_number | clean_waiver_number }}
+      </h5>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-bordered mb-0">
+        <tbody>
+          <tr>
+            <th class="table-light" style="width: 220px;">Waiver Number</th>
+            <td>{{ waiver.waiver_number | clean_waiver_number or '—' }}</td>
+          </tr>
+          <tr>
+            <th class="table-light">Date of Issuance</th>
+            <td>{{ waiver.date_of_issuance or '—' }}</td>
+          </tr>
+          <tr>
+            <th class="table-light">Company Name</th>
+            <td>{{ waiver.company_name or '—' }}</td>
+          </tr>
+          <tr>
+            <th class="table-light">Responsible Person</th>
+            <td>{{ (waiver.responsible_person or '—') | clean_person }}</td>
+          </tr>
+          <tr>
+            <th class="table-light">Waivered Regulation</th>
+            <td>{{ waiver.waivered_regulation or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── AI analysis section ──────────────────────────────────────────────── #}
+  {% if not waiver.ai_processed %}
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+      <i class="bi bi-hourglass-split fs-5 flex-shrink-0"></i>
+      <span>
+        AI analysis has not yet been run for this waiver.
+        Run <code>ai_batch_submit.py</code> followed by <code>ai_batch_retrieve.py</code> to process it.
+      </span>
+    </div>
+  {% else %}
+
+    {# ── AI Summary ─────────────────────────────────────────────────────── #}
+    {% if waiver.ai_summary %}
+      <div class="alert alert-info mb-4">
+        <h6 class="alert-heading fw-bold mb-2">
+          <i class="bi bi-robot me-1"></i>AI Summary
+        </h6>
+        {{ waiver.ai_summary }}
+      </div>
+    {% endif %}
+
+    {# ── Structured fields — two-column layout ───────────────────────────── #}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-semibold" style="background-color: #003366; color: white;">
+        <i class="bi bi-list-check me-1"></i>AI-Extracted Details
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+
+          {# Left column #}
+          <div class="col-md-6">
+            <dl class="mb-0">
+
+              <dt class="text-muted small text-uppercase mb-1">Max Altitude</dt>
+              <dd class="mb-4">
+                {% if waiver.max_altitude is not none %}
+                  <span class="badge bg-primary fs-6">{{ waiver.max_altitude }} ft</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </dd>
+
+              <dt class="text-muted small text-uppercase mb-1">Remote / BVLOS Operations</dt>
+              <dd class="mb-4">
+                {% if waiver.remote_operations is none %}
+                  <span class="badge bg-secondary">Unknown</span>
+                {% elif waiver.remote_operations %}
+                  <span class="badge bg-success">Yes</span>
+                {% else %}
+                  <span class="badge bg-danger">No</span>
+                {% endif %}
+              </dd>
+
+              <dt class="text-muted small text-uppercase mb-1">Docking Station</dt>
+              <dd class="mb-0">
+                {% if waiver.docking_station is none %}
+                  <span class="badge bg-secondary">Unknown</span>
+                {% elif waiver.docking_station %}
+                  <span class="badge bg-success">Yes</span>
+                {% else %}
+                  <span class="badge bg-danger">No</span>
+                {% endif %}
+              </dd>
+
+            </dl>
+          </div>
+
+          {# Right column #}
+          <div class="col-md-6">
+            <dl class="mb-0">
+
+              <dt class="text-muted small text-uppercase mb-1">Visibility Minimum</dt>
+              <dd class="mb-4">
+                {% if waiver.visibility_minimum %}
+                  {{ waiver.visibility_minimum }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </dd>
+
+              <dt class="text-muted small text-uppercase mb-1">Cloud Clearance</dt>
+              <dd class="mb-4">
+                {% if waiver.cloud_clearance %}
+                  {{ waiver.cloud_clearance }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </dd>
+
+              <dt class="text-muted small text-uppercase mb-1">Location-Based</dt>
+              <dd class="{% if waiver.specific_locations %}mb-4{% else %}mb-0{% endif %}">
+                {% if waiver.location_based is none %}
+                  <span class="badge bg-secondary">Unknown</span>
+                {% elif waiver.location_based %}
+                  <span class="badge bg-warning text-dark">Yes</span>
+                {% else %}
+                  <span class="badge bg-info text-dark">No — General</span>
+                {% endif %}
+              </dd>
+
+              {% if waiver.specific_locations %}
+                <dt class="text-muted small text-uppercase mb-1">Specific Locations</dt>
+                <dd class="mb-0">{{ waiver.specific_locations }}</dd>
+              {% endif %}
+
+            </dl>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  {% endif %}
+
+  {# ── Action buttons ──────────────────────────────────────────────────── #}
+  <div class="d-flex gap-2 flex-wrap mb-4">
+    {% if waiver.pdf_url %}
+      <a href="{{ waiver.pdf_url }}" target="_blank" rel="noopener" class="btn btn-primary">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Open Original PDF
+      </a>
+    {% endif %}
+    {% if waiver.pdf_local_path %}
+      <a href="/pdf/{{ waiver.pdf_local_path | basename }}" target="_blank" class="btn btn-outline-secondary">
+        <i class="bi bi-download me-1"></i>Local Copy
+      </a>
+    {% endif %}
+    <a href="javascript:history.back()" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+
+{% endblock %}

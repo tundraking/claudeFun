@@ -140,6 +140,16 @@ def waiver_detail(id):
     return render_template("waiver.html", waiver=waiver)
 
 
+@app.route("/waiver/<waiver_number>")
+def waiver_by_number(waiver_number):
+    waiver = g.db.query(Waiver).filter(
+        Waiver.waiver_number.ilike(f"{waiver_number}%")
+    ).first()
+    if waiver is None:
+        abort(404)
+    return render_template("waiver_detail.html", waiver=waiver)
+
+
 def _snippet(pdf_text, keyword, max_len=300):
     if not pdf_text:
         return ""
