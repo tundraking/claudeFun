@@ -241,25 +241,56 @@ def analysis():
     return render_template("analysis.html", waivers=waivers)
 
 
+def _parse_date_ymd(ymd):
+    """Convert 'YYYY-MM-DD' to a datetime.date, or None on failure."""
+    from datetime import datetime
+    try:
+        return datetime.strptime(ymd, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_issuance_date(raw):
+    """Convert a human-readable date string (e.g. 'January 15, 2020') to date."""
+    from datetime import datetime
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(raw.strip(), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 @app.route("/api/waivers/by-state")
 def waivers_by_state():
     from sqlalchemy import func
-    date_from = request.args.get("date_from", "").strip()
-    date_to = request.args.get("date_to", "").strip()
+    date_from = _parse_date_ymd(request.args.get("date_from", "").strip())
+    date_to = _parse_date_ymd(request.args.get("date_to", "").strip())
     regulation = request.args.get("regulation", "").strip()
 
-    query = g.db.query(Waiver.state, func.count(Waiver.id).label("count")).filter(
-        Waiver.state.isnot(None)
+    # Pull every waiver that has a state; filter in Python because
+    # date_of_issuance is stored as a human-readable string.
+    query = (
+        g.db.query(Waiver.state, Waiver.date_of_issuance, Waiver.waivered_regulation)
+        .filter(Waiver.state.isnot(None))
     )
-    if date_from:
-        query = query.filter(Waiver.date_of_issuance >= date_from)
-    if date_to:
-        query = query.filter(Waiver.date_of_issuance <= date_to)
     if regulation:
         query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
 
-    rows = query.group_by(Waiver.state).order_by(Waiver.state).all()
-    return jsonify([{"state": r.state, "count": r.count} for r in rows])
+    counts = {}
+    for row in query.all():
+        if date_from or date_to:
+            d = _parse_issuance_date(row.date_of_issuance) if row.date_of_issuance else None
+            if d is None:
+                continue
+            if date_from and d < date_from:
+                continue
+            if date_to and d > date_to:
+                continue
+        counts[row.state] = counts.get(row.state, 0) + 1
+
+    result = [{"state": s, "count": c} for s, c in sorted(counts.items())]
+    return jsonify(result)
 
 
 @app.route("/refresh", methods=["POST"])

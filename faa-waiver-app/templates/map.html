@@ -36,7 +36,6 @@
 <script>
 const GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
 
-// Full name → two-letter abbreviation (PublicaMundi GeoJSON has only "name" property)
 const NAME_TO_ABBR = {
   'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
   'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
@@ -51,46 +50,64 @@ const NAME_TO_ABBR = {
   'West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY','District of Columbia':'DC',
 };
 
-// Sequential white → dark-blue, 5 buckets
-const BUCKETS = [
-  { min: 0,   max: 0,   color: '#f0f0f0', label: '0' },
-  { min: 1,   max: 10,  color: '#c6dbef', label: '1–10' },
-  { min: 11,  max: 50,  color: '#6baed6', label: '11–50' },
-  { min: 51,  max: 150, color: '#2171b5', label: '51–150' },
-  { min: 151, max: Infinity, color: '#08306b', label: '151+' },
-];
+// White → dark-blue color ramp (5 levels, index 0 = zero count)
+const COLORS = ['#f0f0f0', '#c6dbef', '#6baed6', '#2171b5', '#08306b'];
 
-function bucketColor(count) {
-  for (const b of BUCKETS) {
+// Build auto-sized buckets from the actual max value
+function makeBuckets(maxVal) {
+  if (maxVal <= 0) {
+    return [{ min: 0, max: 0, color: COLORS[0], label: '0' }];
+  }
+  // Four non-zero buckets that split the range evenly
+  const step = Math.max(1, Math.ceil(maxVal / 4));
+  const buckets = [{ min: 0, max: 0, color: COLORS[0], label: '0' }];
+  for (let i = 0; i < 4; i++) {
+    const lo = i * step + 1;
+    const hi = (i === 3) ? Infinity : (i + 1) * step;
+    const label = hi === Infinity ? `${lo.toLocaleString()}+` : `${lo.toLocaleString()}–${hi.toLocaleString()}`;
+    buckets.push({ min: lo, max: hi, color: COLORS[i + 1], label });
+  }
+  return buckets;
+}
+
+function bucketColor(count, buckets) {
+  for (const b of buckets) {
     if (count >= b.min && count <= b.max) return b.color;
   }
-  return BUCKETS[BUCKETS.length - 1].color;
+  return COLORS[COLORS.length - 1];
 }
 
 const map = L.map('map').setView([39.5, -98.35], 4);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+// CartoDB Positron — clean, minimal basemap
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
 }).addTo(map);
 
-// Legend
-const legend = L.control({ position: 'bottomright' });
-legend.onAdd = function () {
-  const div = L.DomUtil.create('div', 'leaflet-legend');
-  div.style.cssText = 'background:#fff;padding:8px 12px;border-radius:4px;border:1px solid #ccc;font-size:12px;line-height:1.6;';
-  div.innerHTML = '<strong style="display:block;margin-bottom:4px;">Waivers</strong>' +
-    BUCKETS.map(b =>
+// Dynamic legend
+const legendCtrl = L.control({ position: 'bottomright' });
+let legendDiv = null;
+legendCtrl.onAdd = function () {
+  legendDiv = L.DomUtil.create('div');
+  legendDiv.style.cssText = 'background:#fff;padding:8px 12px;border-radius:4px;border:1px solid #ccc;font-size:12px;line-height:1.6;';
+  return legendDiv;
+};
+legendCtrl.addTo(map);
+
+function updateLegend(buckets) {
+  if (!legendDiv) return;
+  legendDiv.innerHTML = '<strong style="display:block;margin-bottom:4px;">Waivers</strong>' +
+    buckets.map(b =>
       `<span style="display:inline-block;width:14px;height:14px;background:${b.color};border:1px solid #aaa;vertical-align:middle;margin-right:5px;"></span>${b.label}`
     ).join('<br>');
-  return div;
-};
-legend.addTo(map);
+}
 
-let geojsonData = null;   // cached GeoJSON
-let choropleth = null;    // current Leaflet layer
+let geojsonData = null;
+let choropleth = null;
 
-function buildLayer(countByState) {
+function buildLayer(countByState, buckets) {
   if (choropleth) { map.removeLayer(choropleth); }
 
   choropleth = L.geoJSON(geojsonData, {
@@ -98,9 +115,9 @@ function buildLayer(countByState) {
       const abbr = NAME_TO_ABBR[feature.properties.name];
       const count = (abbr && countByState[abbr]) || 0;
       return {
-        fillColor: bucketColor(count),
+        fillColor: bucketColor(count, buckets),
         fillOpacity: 0.75,
-        color: '#555',
+        color: '#888',
         weight: 0.8,
       };
     },
@@ -109,7 +126,7 @@ function buildLayer(countByState) {
       const abbr  = NAME_TO_ABBR[name];
       const count = (abbr && countByState[abbr]) || 0;
       layer.bindTooltip(
-        `<strong>${name} (${abbr})</strong><br>${count.toLocaleString()} waiver${count !== 1 ? 's' : ''}`,
+        `<strong>${name} (${abbr || '?'})</strong><br>${count.toLocaleString()} waiver${count !== 1 ? 's' : ''}`,
         { sticky: true }
       );
       layer.on({
@@ -128,8 +145,8 @@ function buildLayer(countByState) {
 
 function applyFilters() {
   const params = new URLSearchParams();
-  const dateFrom  = document.getElementById('date_from').value;
-  const dateTo    = document.getElementById('date_to').value;
+  const dateFrom   = document.getElementById('date_from').value;
+  const dateTo     = document.getElementById('date_to').value;
   const regulation = document.getElementById('regulation').value.trim();
   if (dateFrom)   params.set('date_from',  dateFrom);
   if (dateTo)     params.set('date_to',    dateTo);
@@ -140,19 +157,24 @@ function applyFilters() {
     .then(rows => {
       const countByState = {};
       let total = 0;
+      let maxVal = 0;
       for (const row of rows) {
         countByState[row.state] = row.count;
         total += row.count;
+        if (row.count > maxVal) maxVal = row.count;
       }
 
+      const buckets = makeBuckets(maxVal);
+      updateLegend(buckets);
+
       if (geojsonData) {
-        buildLayer(countByState);
+        buildLayer(countByState, buckets);
       } else {
         fetch(GEOJSON_URL)
           .then(r => r.json())
           .then(gj => {
             geojsonData = gj;
-            buildLayer(countByState);
+            buildLayer(countByState, buckets);
           });
       }
 
@@ -169,7 +191,7 @@ document.getElementById('filter-form').addEventListener('submit', function (e) {
   applyFilters();
 });
 
-// Initial load
+// Initial load — no filters, shows all waivers
 applyFilters();
 </script>
 {% endblock %}
