@@ -1,3 +1,29 @@
+"""
+extract_shielding.py — Extract and analyze shielding provisions from FAA waiver PDFs.
+
+SETUP
+-----
+1. Install Ollama from https://ollama.com and ensure the daemon is running.
+2. Pull the default model:
+       ollama pull llama3.2:3b
+
+USAGE
+-----
+Run from the repository root:
+    python faa-waiver-app/extract_shielding.py
+
+Optional flags:
+    --model mistral:7b   Use a different Ollama model (default: llama3.2:3b)
+    --reprocess          Re-run Ollama for waivers that already have a
+                         shielding_analysis record, overwriting previous results
+
+DEPENDENCIES
+------------
+No new packages are required beyond what is already in requirements.txt.
+The script uses only the Python standard library plus:
+    - requests   (already in requirements.txt)
+    - sqlalchemy (already in requirements.txt)
+"""
 import argparse
 import json
 import re
