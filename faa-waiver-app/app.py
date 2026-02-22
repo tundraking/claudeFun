@@ -206,20 +206,26 @@ def map_view():
 
 @app.route("/api/waivers/geo")
 def waivers_geo():
-    waivers = (
-        g.db.query(Waiver)
+    rows = (
+        g.db.query(
+            Waiver.waiver_number,
+            Waiver.company_name,
+            Waiver.responsible_person,
+            Waiver.latitude,
+            Waiver.longitude,
+        )
         .filter(Waiver.latitude.isnot(None), Waiver.longitude.isnot(None))
         .all()
     )
     return jsonify([
         {
-            "waiver_number": w.waiver_number,
-            "company_name": w.company_name,
-            "responsible_person": w.responsible_person,
-            "latitude": w.latitude,
-            "longitude": w.longitude,
+            "waiver_number": r.waiver_number,
+            "company_name": r.company_name,
+            "responsible_person": r.responsible_person,
+            "latitude": r.latitude,
+            "longitude": r.longitude,
         }
-        for w in waivers
+        for r in rows
     ])
 
 

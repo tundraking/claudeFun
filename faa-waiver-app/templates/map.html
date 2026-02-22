@@ -9,7 +9,10 @@
 
 {% block scripts %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <script>
   const map = L.map('map').setView([39.5, -98.35], 4);
 
@@ -21,7 +24,8 @@
   fetch('/api/waivers/geo')
     .then(r => r.json())
     .then(waivers => {
-      waivers.forEach(w => {
+      const cluster = L.markerClusterGroup({ chunkedLoading: true });
+      const markers = waivers.map(w => {
         const baseNumber = (w.waiver_number || '').match(/107W-\d{4}-\d+/);
         const href = baseNumber ? '/waiver/' + baseNumber[0] : '#';
         const popup = [
@@ -29,8 +33,10 @@
           w.company_name || '',
           w.responsible_person || '',
         ].filter(Boolean).join('<br>');
-        L.marker([w.latitude, w.longitude]).addTo(map).bindPopup(popup);
+        return L.marker([w.latitude, w.longitude]).bindPopup(popup);
       });
+      cluster.addLayers(markers);
+      map.addLayer(cluster);
       document.getElementById('marker-count').textContent =
         'Showing ' + waivers.length.toLocaleString() + ' geocoded waivers';
     });
