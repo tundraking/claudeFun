@@ -12,8 +12,16 @@ SLEEP_SECONDS = 1.1
 # Matches the "ADDRESS –" label in FAA waiver PDFs (em-dash, en-dash, hyphen, or colon)
 ADDRESS_LABEL_RE = re.compile(r"^ADDRESS\s*[–—\-:]?\s*(.*)", re.IGNORECASE)
 
-# Looks like a US ZIP code
-ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
+# Matches a US ZIP code that is preceded by a two-letter state abbreviation,
+# which is how ZIP codes appear in FAA waiver addresses (e.g. "Atlanta, GA 30301").
+# Using a whitelist of real state/territory codes prevents false positives on
+# street numbers like "Unit 31009" where there is no preceding state token.
+_US_STATES = (
+    "AL|AK|AS|AZ|AR|CA|CO|CT|DE|DC|FL|GA|GU|HI|ID|IL|IN|IA|KS|KY|"
+    "LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|MP|OH|OK|OR|"
+    "PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|VI|WA|WV|WI|WY"
+)
+ZIP_RE = re.compile(rf"\b(?:{_US_STATES})[,\s]+\d{{5}}(?:-\d{{4}})?\b")
 
 
 def extract_address(pdf_text):
