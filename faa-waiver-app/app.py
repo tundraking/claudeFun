@@ -2,7 +2,7 @@ import os
 import re
 from flask import Flask, render_template, request, abort, send_from_directory, g, jsonify
 from sqlalchemy import text
-from database import SessionLocal, Waiver, init_db, setup_fts, populate_fts
+from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, populate_fts
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
 
@@ -210,5 +210,6 @@ def serve_pdf(filename):
 
 if __name__ == "__main__":
     init_db()
+    migrate_db()
     setup_fts()
     app.run(debug=True)
