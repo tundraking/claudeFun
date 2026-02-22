@@ -12,58 +12,28 @@ SLEEP_SECONDS = 1.1
 # Matches the "ADDRESS –" label in FAA waiver PDFs (em-dash, en-dash, hyphen, or colon)
 ADDRESS_LABEL_RE = re.compile(r"^ADDRESS\s*[–—\-:]?\s*(.*)", re.IGNORECASE)
 
-# End of an address block: a new labeled field (e.g. "NAME –") or a section keyword
-FIELD_LABEL_RE = re.compile(r"^[A-Z][A-Z\s]{2,}[–—\-:]", re.IGNORECASE)
-SECTION_STOP_RE = re.compile(
-    r"\b(CONDITIONS?|LIMITATIONS?|AUTHORIZED\s+AREA|SECTION|REQUIREMENTS?)\b",
-    re.IGNORECASE,
-)
-
 # Looks like a US ZIP code
 ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
 
 
 def extract_address(pdf_text):
-    """Extract a postal address from pdf_text by finding the ADDRESS label.
+    """Extract city/state/ZIP from pdf_text by finding the ADDRESS label.
 
-    Scans for a line starting with 'ADDRESS' (followed by an optional dash/colon),
-    then collects subsequent lines until a blank line or another labeled field.
-    Returns a comma-joined string suitable for Nominatim, or None if not found.
+    Scans for a line starting with 'ADDRESS' then looks for the first line
+    containing a US ZIP code within the next 5 lines. Returns that line with
+    ', USA' appended for Nominatim, or None if not found.
     """
     lines = pdf_text.splitlines()
 
     for i, line in enumerate(lines):
-        m = ADDRESS_LABEL_RE.match(line.strip())
-        if m is None:
+        if ADDRESS_LABEL_RE.match(line.strip()) is None:
             continue
 
-        collected = []
-        # The rest of the ADDRESS label line may itself contain address text
-        inline = m.group(1).strip()
-        if inline:
-            collected.append(inline)
-            if ZIP_RE.search(inline):
-                # Entire address was on one line — done
-                return ", ".join(collected) + ", USA"
-
-        # Collect subsequent lines until blank, next labeled field, section keyword,
-        # or we've already seen a ZIP code (which ends any US postal address).
-        for follow in lines[i + 1:]:
+        # Search the next 5 lines for a ZIP code
+        for follow in lines[i:i + 6]:
             stripped = follow.strip()
-            if not stripped:
-                break
-            if FIELD_LABEL_RE.match(stripped) or SECTION_STOP_RE.search(stripped):
-                break
-            collected.append(stripped)
             if ZIP_RE.search(stripped):
-                break  # ZIP code marks the end of the address block
-
-        if not collected:
-            return None
-
-        # Build the query: prefer the line(s) that contain a ZIP for tighter geocoding,
-        # but include all collected lines so Nominatim has city/state context too.
-        return ", ".join(collected) + ", USA"
+                return stripped + ", USA"
 
     return None
 
