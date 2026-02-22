@@ -322,7 +322,14 @@ def waivers_meta():
         .filter(Waiver.waivered_regulation.isnot(None))
         .all()
     )
-    regulations = sorted(r for (r,) in reg_rows if r)
+    reg_codes = set()
+    for (raw,) in reg_rows:
+        if raw:
+            for part in raw.split(","):
+                part = part.strip()
+                if part:
+                    reg_codes.add(part)
+    regulations = sorted(reg_codes)
 
     return jsonify({"date_range": date_range, "regulations": regulations})
 
