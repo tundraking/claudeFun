@@ -194,8 +194,11 @@ function applyFilters() {
   const toYear = Math.round(values[1]);
 
   const params = new URLSearchParams();
-  params.set('date_from', `${fromYear}-01-01`);
-  params.set('date_to', `${toYear}-12-31`);
+  const yearFiltered = sliderMinYear !== null && (fromYear !== sliderMinYear || toYear !== sliderMaxYear);
+  if (yearFiltered) {
+    params.set('date_from', `${fromYear}-01-01`);
+    params.set('date_to', `${toYear}-12-31`);
+  }
   const selectedRegs = choicesInstance ? choicesInstance.getValue(true) : [];
   if (selectedRegs.length > 0) {
     params.set('regulation', selectedRegs.join(','));
