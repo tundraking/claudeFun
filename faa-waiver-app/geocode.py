@@ -56,6 +56,46 @@ def geocode_address(address):
     return None, None
 
 
+def geocode_new_waivers():
+    """Geocode only waivers that have PDF text but no coordinates.
+
+    Creates its own database session so it is safe to call from within a
+    Flask request context.  Returns the number of waivers that were
+    successfully geocoded during this call.
+    """
+    session = SessionLocal()
+    try:
+        waivers = (
+            session.query(Waiver)
+            .filter(Waiver.pdf_text.isnot(None), Waiver.latitude.is_(None))
+            .all()
+        )
+        print(f"[Geocode] {len(waivers)} waiver(s) without coordinates.")
+
+        succeeded = 0
+        for waiver in waivers:
+            address = extract_address(waiver.pdf_text)
+            if not address:
+                print(f"[Geocode] [SKIP] {waiver.waiver_number} — no address found")
+                continue
+
+            lat, lon = geocode_address(address)
+            if lat is not None:
+                waiver.latitude = lat
+                waiver.longitude = lon
+                session.commit()
+                print(f"[Geocode] [OK]   {waiver.waiver_number} → {lat}, {lon}")
+                succeeded += 1
+            else:
+                print(f"[Geocode] [FAIL] {waiver.waiver_number} — no result for: {address!r}")
+
+            time.sleep(SLEEP_SECONDS)
+
+        return succeeded
+    finally:
+        session.close()
+
+
 def run():
     migrate_db()
 

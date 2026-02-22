@@ -5,6 +5,7 @@ from sqlalchemy import text
 from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, populate_fts
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
+from geocode import geocode_new_waivers
 
 app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
@@ -244,8 +245,11 @@ def refresh():
     print("[Refresh] Step 3: Rebuilding FTS index...")
     populate_fts()
 
-    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed.")
-    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed})
+    print("[Refresh] Step 4: Geocoding new waivers...")
+    geocoded = geocode_new_waivers()
+
+    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed, {geocoded} address(es) geocoded.")
+    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed, "geocoded": geocoded})
 
 
 @app.route("/pdf/<path:filename>")

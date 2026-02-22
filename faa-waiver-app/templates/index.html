@@ -188,7 +188,7 @@ async function runRefresh() {
     const data = await resp.json();
     if (data.success) {
       msg.className = 'text-success small';
-      msg.textContent = `Done — ${data.new_waivers} new waiver(s) added, ${data.pdfs_processed} PDF(s) processed.`;
+      msg.textContent = `Done — ${data.new_waivers} new waiver(s) added, ${data.pdfs_processed} PDF(s) processed, ${data.geocoded} address(es) geocoded.`;
     } else {
       msg.className = 'text-danger small';
       msg.textContent = 'Refresh failed. Check the console for details.';
