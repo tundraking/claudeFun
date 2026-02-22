@@ -6,6 +6,7 @@ from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, popul
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
 from geocode import geocode_new_waivers
+from parse_states import parse_states_for_new_waivers
 
 app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
@@ -240,6 +241,27 @@ def analysis():
     return render_template("analysis.html", waivers=waivers)
 
 
+@app.route("/api/waivers/by-state")
+def waivers_by_state():
+    from sqlalchemy import func
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    regulation = request.args.get("regulation", "").strip()
+
+    query = g.db.query(Waiver.state, func.count(Waiver.id).label("count")).filter(
+        Waiver.state.isnot(None)
+    )
+    if date_from:
+        query = query.filter(Waiver.date_of_issuance >= date_from)
+    if date_to:
+        query = query.filter(Waiver.date_of_issuance <= date_to)
+    if regulation:
+        query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+
+    rows = query.group_by(Waiver.state).order_by(Waiver.state).all()
+    return jsonify([{"state": r.state, "count": r.count} for r in rows])
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh():
     print("[Refresh] Step 1: Scraping for new waivers from FAA table...")
@@ -254,8 +276,11 @@ def refresh():
     print("[Refresh] Step 4: Geocoding new waivers...")
     geocoded = geocode_new_waivers()
 
-    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed, {geocoded} address(es) geocoded.")
-    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed, "geocoded": geocoded})
+    print("[Refresh] Step 5: Parsing states for new waivers...")
+    states_parsed = parse_states_for_new_waivers()
+
+    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed, {geocoded} address(es) geocoded, {states_parsed} state(s) parsed.")
+    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed, "geocoded": geocoded, "states_parsed": states_parsed})
 
 
 @app.route("/pdf/<path:filename>")
