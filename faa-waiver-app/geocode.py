@@ -9,69 +9,57 @@ NOMINATIM_HEADERS = {
 }
 SLEEP_SECONDS = 1.1
 
-# Only stop on lines that are strongly section-header-like.
-# Require specific known keywords — not just any all-caps text, since company
-# names, state names, and document titles are also all-caps.
-SECTION_KEYWORDS_RE = re.compile(
-    r"\b(CONDITIONS?|LIMITATIONS?|AUTHORIZED\s+AREA|OPERATIONAL|REQUIREMENTS?|SECTION)\b",
+# Matches the "ADDRESS –" label in FAA waiver PDFs (em-dash, en-dash, hyphen, or colon)
+ADDRESS_LABEL_RE = re.compile(r"^ADDRESS\s*[–—\-:]?\s*(.*)", re.IGNORECASE)
+
+# End of an address block: a new labeled field (e.g. "NAME –") or a section keyword
+FIELD_LABEL_RE = re.compile(r"^[A-Z][A-Z\s]{2,}[–—\-:]", re.IGNORECASE)
+SECTION_STOP_RE = re.compile(
+    r"\b(CONDITIONS?|LIMITATIONS?|AUTHORIZED\s+AREA|SECTION|REQUIREMENTS?)\b",
     re.IGNORECASE,
 )
 
-# A lone number or numbered-section like "1." or "1)" — classic section header
-LONE_NUMBER_RE = re.compile(r"^\d+[\.\)]?\s*$")
-
-# Looks like a US ZIP code — a good indicator of an address line
+# Looks like a US ZIP code
 ZIP_RE = re.compile(r"\b\d{5}(?:-\d{4})?\b")
-
-# Looks like a street address — starts with digits followed by a word
-STREET_RE = re.compile(r"^\d+\s+\w")
-
-# Known boilerplate titles at the top of FAA waiver PDFs to skip rather than stop on
-BOILERPLATE_RE = re.compile(
-    r"^\s*(certificate\s+of\s+(waiver|authorization)|faa\s+form\s+\d|"
-    r"part\s+107|unmanned\s+aircraft|uas\b)",
-    re.IGNORECASE,
-)
-
-
-def is_section_header(line):
-    """Return True if the line is a section boundary, not part of the address block."""
-    if LONE_NUMBER_RE.match(line):
-        return True
-    if SECTION_KEYWORDS_RE.search(line):
-        return True
-    return False
 
 
 def extract_address(pdf_text):
-    """Extract an address from the first 15 lines of pdf_text.
+    """Extract a postal address from pdf_text by finding the ADDRESS label.
 
-    Skips line 0 (waiver number header) and known boilerplate titles, then
-    collects non-empty lines until a section header is detected. Returns the
-    most address-like subset of collected lines joined with commas, or None.
+    Scans for a line starting with 'ADDRESS' (followed by an optional dash/colon),
+    then collects subsequent lines until a blank line or another labeled field.
+    Returns a comma-joined string suitable for Nominatim, or None if not found.
     """
-    lines = pdf_text.splitlines()[:15]
-    collected = []
-    for line in lines[1:]:
-        stripped = line.strip()
-        if not stripped:
+    lines = pdf_text.splitlines()
+
+    for i, line in enumerate(lines):
+        m = ADDRESS_LABEL_RE.match(line.strip())
+        if m is None:
             continue
-        if is_section_header(stripped):
-            break
-        # Skip known FAA boilerplate document titles rather than stopping on them
-        if BOILERPLATE_RE.match(stripped):
-            continue
-        collected.append(stripped)
 
-    if not collected:
-        return None
+        collected = []
+        # The rest of the ADDRESS label line may itself contain address text
+        inline = m.group(1).strip()
+        if inline:
+            collected.append(inline)
 
-    # Prefer lines that look like actual postal address components (street or ZIP).
-    # This avoids sending the person's name or company name to Nominatim.
-    address_lines = [l for l in collected if ZIP_RE.search(l) or STREET_RE.match(l)]
-    query_lines = address_lines if address_lines else collected
+        # Collect subsequent lines until blank or next labeled field
+        for follow in lines[i + 1:]:
+            stripped = follow.strip()
+            if not stripped:
+                break
+            if FIELD_LABEL_RE.match(stripped) or SECTION_STOP_RE.search(stripped):
+                break
+            collected.append(stripped)
 
-    return ", ".join(query_lines) + ", USA"
+        if not collected:
+            return None
+
+        # Build the query: prefer the line(s) that contain a ZIP for tighter geocoding,
+        # but include all collected lines so Nominatim has city/state context too.
+        return ", ".join(collected) + ", USA"
+
+    return None
 
 
 def geocode_address(address):
