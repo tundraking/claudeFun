@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Map — FAA Waiver Browser{% endblock %}
+
+{% block content %}
+<div id="map" style="width:100%; height:75vh; border-radius:6px; border:1px solid #dee2e6;"></div>
+<p class="text-muted small mt-2 mb-0" id="marker-count"></p>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script>
+  const map = L.map('map').setView([39.5, -98.35], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  fetch('/api/waivers/geo')
+    .then(r => r.json())
+    .then(waivers => {
+      const cluster = L.markerClusterGroup({ chunkedLoading: true });
+      const markers = waivers.map(w => {
+        const baseNumber = (w.waiver_number || '').match(/107W-\d{4}-\d+/);
+        const href = baseNumber ? '/waiver/' + baseNumber[0] : '#';
+        const popup = [
+          '<a href="' + href + '">' + (w.waiver_number || '—') + '</a>',
+          w.company_name || '',
+          w.responsible_person || '',
+        ].filter(Boolean).join('<br>');
+        return L.marker([w.latitude, w.longitude]).bindPopup(popup);
+      });
+      cluster.addLayers(markers);
+      map.addLayer(cluster);
+      document.getElementById('marker-count').textContent =
+        'Showing ' + waivers.length.toLocaleString() + ' geocoded waivers';
+    });
+</script>
+{% endblock %}
