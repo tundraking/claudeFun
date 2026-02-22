@@ -36,7 +36,7 @@ def init_db():
 
 
 def setup_fts():
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(text(
             """
             CREATE VIRTUAL TABLE IF NOT EXISTS waivers_fts
@@ -51,13 +51,11 @@ def setup_fts():
             )
             """
         ))
-        conn.commit()
 
 
 def populate_fts():
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(text("INSERT INTO waivers_fts(waivers_fts) VALUES('rebuild')"))
-        conn.commit()
 
 
 def migrate_db():
@@ -72,14 +70,13 @@ def migrate_db():
         ("specific_locations", "TEXT"),
         ("ai_processed", "BOOLEAN DEFAULT 0"),
     ]
-    with engine.connect() as conn:
-        for col_name, col_type in new_columns:
-            try:
+    for col_name, col_type in new_columns:
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE waivers ADD COLUMN {col_name} {col_type}"))
-                conn.commit()
-                print(f"Added column: {col_name}")
-            except Exception:
-                print(f"Column already exists (skipped): {col_name}")
+            print(f"Added column: {col_name}")
+        except Exception:
+            print(f"Column already exists (skipped): {col_name}")
 
 
 if __name__ == "__main__":
