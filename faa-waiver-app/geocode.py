@@ -42,8 +42,12 @@ def extract_address(pdf_text):
         inline = m.group(1).strip()
         if inline:
             collected.append(inline)
+            if ZIP_RE.search(inline):
+                # Entire address was on one line — done
+                return ", ".join(collected) + ", USA"
 
-        # Collect subsequent lines until blank or next labeled field
+        # Collect subsequent lines until blank, next labeled field, section keyword,
+        # or we've already seen a ZIP code (which ends any US postal address).
         for follow in lines[i + 1:]:
             stripped = follow.strip()
             if not stripped:
@@ -51,6 +55,8 @@ def extract_address(pdf_text):
             if FIELD_LABEL_RE.match(stripped) or SECTION_STOP_RE.search(stripped):
                 break
             collected.append(stripped)
+            if ZIP_RE.search(stripped):
+                break  # ZIP code marks the end of the address block
 
         if not collected:
             return None
