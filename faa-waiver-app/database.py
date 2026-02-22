@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, Float, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///waivers.db"
@@ -29,6 +29,8 @@ class Waiver(Base):
     location_based = Column(Boolean, nullable=True)
     specific_locations = Column(Text, nullable=True)
     ai_processed = Column(Boolean, default=False, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
 
 def init_db():
@@ -69,6 +71,8 @@ def migrate_db():
         ("location_based", "BOOLEAN"),
         ("specific_locations", "TEXT"),
         ("ai_processed", "BOOLEAN DEFAULT 0"),
+        ("latitude", "REAL"),
+        ("longitude", "REAL"),
     ]
     for col_name, col_type in new_columns:
         try:
