@@ -140,6 +140,16 @@ def waiver_detail(id):
     return render_template("waiver.html", waiver=waiver)
 
 
+@app.route("/waiver/<waiver_number>")
+def waiver_by_number(waiver_number):
+    waiver = g.db.query(Waiver).filter(
+        Waiver.waiver_number.ilike(f"{waiver_number}%")
+    ).first()
+    if waiver is None:
+        abort(404)
+    return render_template("waiver_detail.html", waiver=waiver)
+
+
 def _snippet(pdf_text, keyword, max_len=300):
     if not pdf_text:
         return ""
@@ -186,6 +196,17 @@ def search():
         except Exception as e:
             error = str(e)
     return render_template("search_results.html", results=results, keyword=keyword, error=error)
+
+
+@app.route("/analysis")
+def analysis():
+    waivers = (
+        g.db.query(Waiver)
+        .filter(Waiver.ai_processed == True)
+        .order_by(Waiver.date_of_issuance.desc())
+        .all()
+    )
+    return render_template("analysis.html", waivers=waivers)
 
 
 @app.route("/refresh", methods=["POST"])

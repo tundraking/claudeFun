@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Waiver Analysis — FAA Waiver Browser{% endblock %}
+
+{# ── Helpers ──────────────────────────────────────────────────────────────── #}
+{% macro bool_attr(val) %}{% if val is none %}unknown{% elif val %}yes{% else %}no{% endif %}{% endmacro %}
+
+{% macro bool_badge(val) %}
+  {% if val is none %}
+    <span class="badge bg-secondary">Unknown</span>
+  {% elif val %}
+    <span class="badge bg-success">Yes</span>
+  {% else %}
+    <span class="badge bg-danger">No</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro vis_badge(val) %}
+  {% if val %}
+    <span class="badge bg-success">Yes</span>
+  {% elif val is none %}
+    <span class="badge bg-secondary">Unknown</span>
+  {% else %}
+    <span class="badge bg-danger">No</span>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+
+  <h4 class="mb-4 fw-bold">
+    <i class="bi bi-bar-chart-line me-2"></i>Waiver Analysis
+  </h4>
+
+  {% if not waivers %}
+    <div class="alert alert-warning">
+      No AI-processed waivers found. Run <code>ai_batch_submit.py</code> and
+      <code>ai_batch_retrieve.py</code> first.
+    </div>
+  {% else %}
+
+    {# ── Filters ──────────────────────────────────────────────────────── #}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold" style="background-color: #003366; color: white;">
+        <i class="bi bi-funnel me-1"></i>Filter by AI-Extracted Fields
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+
+          <div class="col-md-4">
+            <p class="fw-semibold small text-uppercase text-muted mb-2">Remote / BVLOS Operations</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="remote-yes" name="remote" value="yes" checked>
+                <label class="form-check-label" for="remote-yes">
+                  <span class="badge bg-success">Yes</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="remote-no" name="remote" value="no" checked>
+                <label class="form-check-label" for="remote-no">
+                  <span class="badge bg-danger">No</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="remote-unknown" name="remote" value="unknown" checked>
+                <label class="form-check-label" for="remote-unknown">
+                  <span class="badge bg-secondary">Unknown</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <p class="fw-semibold small text-uppercase text-muted mb-2">Docking Station</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="docking-yes" name="docking" value="yes" checked>
+                <label class="form-check-label" for="docking-yes">
+                  <span class="badge bg-success">Yes</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="docking-no" name="docking" value="no" checked>
+                <label class="form-check-label" for="docking-no">
+                  <span class="badge bg-danger">No</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="docking-unknown" name="docking" value="unknown" checked>
+                <label class="form-check-label" for="docking-unknown">
+                  <span class="badge bg-secondary">Unknown</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <p class="fw-semibold small text-uppercase text-muted mb-2">Location-Based</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="location-yes" name="location" value="yes" checked>
+                <label class="form-check-label" for="location-yes">
+                  <span class="badge bg-warning text-dark">Yes</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="location-no" name="location" value="no" checked>
+                <label class="form-check-label" for="location-no">
+                  <span class="badge bg-info text-dark">No — General</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input filter-cb" type="checkbox"
+                       id="location-unknown" name="location" value="unknown" checked>
+                <label class="form-check-label" for="location-unknown">
+                  <span class="badge bg-secondary">Unknown</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="mt-3">
+          <button class="btn btn-sm btn-outline-secondary" id="reset-filters">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {# ── Result count ──────────────────────────────────────────────────── #}
+    <p class="text-muted small mb-2">
+      <span id="result-count">{{ waivers | length }}</span>
+      of {{ waivers | length }} waiver{{ 's' if waivers | length != 1 }} shown
+    </p>
+
+    {# ── Table ────────────────────────────────────────────────────────── #}
+    <div class="table-responsive shadow-sm rounded">
+      <table class="table table-bordered table-hover align-middle mb-0 bg-white" id="analysis-table">
+        <thead>
+          <tr>
+            <th>Waiver Number</th>
+            <th>Company Name</th>
+            <th>Date of Issuance</th>
+            <th class="text-center">Max Altitude</th>
+            <th class="text-center">Remote / BVLOS</th>
+            <th class="text-center">Docking Station</th>
+            <th class="text-center">Location-Based</th>
+            <th class="text-center">Visibility Min. Specified</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w in waivers %}
+            <tr
+              data-remote="{{ bool_attr(w.remote_operations) }}"
+              data-docking="{{ bool_attr(w.docking_station) }}"
+              data-location="{{ bool_attr(w.location_based) }}"
+            >
+              <td>
+                <a href="/waiver/{{ w.waiver_number | clean_waiver_number }}">
+                  {{ (w.waiver_number or '—') | clean_waiver_number }}
+                </a>
+              </td>
+              <td>{{ w.company_name or '—' }}</td>
+              <td class="text-nowrap">{{ w.date_of_issuance or '—' }}</td>
+              <td class="text-center">
+                {% if w.max_altitude is not none %}
+                  <span class="badge bg-primary">{{ w.max_altitude }} ft</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ bool_badge(w.remote_operations) }}</td>
+              <td class="text-center">{{ bool_badge(w.docking_station) }}</td>
+              <td class="text-center">
+                {% if w.location_based is none %}
+                  <span class="badge bg-secondary">Unknown</span>
+                {% elif w.location_based %}
+                  <span class="badge bg-warning text-dark">Yes</span>
+                {% else %}
+                  <span class="badge bg-info text-dark">No — General</span>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ vis_badge(w.visibility_minimum) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div id="no-results-msg" class="alert alert-secondary text-center mt-3" style="display:none;">
+      No waivers match the selected filters.
+    </div>
+
+  {% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const rows = Array.from(document.querySelectorAll('#analysis-table tbody tr'));
+  const countEl = document.getElementById('result-count');
+  const noResultsMsg = document.getElementById('no-results-msg');
+
+  function getChecked(name) {
+    return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`))
+                .map(cb => cb.value);
+  }
+
+  function applyFilters() {
+    const remote   = getChecked('remote');
+    const docking  = getChecked('docking');
+    const location = getChecked('location');
+
+    let visible = 0;
+    rows.forEach(row => {
+      const show = remote.includes(row.dataset.remote) &&
+                   docking.includes(row.dataset.docking) &&
+                   location.includes(row.dataset.location);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (countEl) countEl.textContent = visible;
+    if (noResultsMsg) noResultsMsg.style.display = visible === 0 ? '' : 'none';
+  }
+
+  document.querySelectorAll('.filter-cb').forEach(cb => {
+    cb.addEventListener('change', applyFilters);
+  });
+
+  document.getElementById('reset-filters')?.addEventListener('click', () => {
+    document.querySelectorAll('.filter-cb').forEach(cb => { cb.checked = true; });
+    applyFilters();
+  });
+
+  applyFilters();
+})();
+</script>
+{% endblock %}
