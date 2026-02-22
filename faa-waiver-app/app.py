@@ -366,6 +366,8 @@ def shielding():
         if parsed and isinstance(parsed, dict):
             shielding_types = parsed.get("shielding_types") or []
             for prov in (parsed.get("provisions") or []):
+                if not isinstance(prov, dict):
+                    continue
                 alt = prov.get("altitude_limits")
                 dist = prov.get("distance_limits")
                 if alt:
