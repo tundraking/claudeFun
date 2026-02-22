@@ -97,6 +97,7 @@ def index():
     person = request.args.get("person", "").strip()
     company = request.args.get("company", "").strip()
     regulation = request.args.get("regulation", "").strip()
+    state = request.args.get("state", "").strip()
     sort = request.args.get("sort", "id")
     order = request.args.get("order", "asc")
     page = max(1, request.args.get("page", 1, type=int))
@@ -110,6 +111,8 @@ def index():
         query = query.filter(Waiver.company_name.ilike(f"%{company}%"))
     if regulation:
         query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+    if state:
+        query = query.filter(Waiver.state.ilike(f"%{state}%"))
 
     sort_col = SORT_COLUMNS.get(sort, Waiver.id)
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
@@ -126,6 +129,7 @@ def index():
         person=person,
         company=company,
         regulation=regulation,
+        state=state,
         sort=sort,
         order=order,
         page=page,
@@ -267,6 +271,7 @@ def waivers_by_state():
     date_from = _parse_date_ymd(request.args.get("date_from", "").strip())
     date_to = _parse_date_ymd(request.args.get("date_to", "").strip())
     regulation = request.args.get("regulation", "").strip()
+    regulations = [r.strip() for r in regulation.split(",") if r.strip()] if regulation else []
 
     # Pull every waiver that has a state; filter in Python because
     # date_of_issuance is stored as a human-readable string.
@@ -274,23 +279,68 @@ def waivers_by_state():
         g.db.query(Waiver.state, Waiver.date_of_issuance, Waiver.waivered_regulation)
         .filter(Waiver.state.isnot(None))
     )
-    if regulation:
-        query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+    if regulations:
+        from sqlalchemy import or_
+        query = query.filter(or_(*(Waiver.waivered_regulation.ilike(f"%{r}%") for r in regulations)))
+
+    from_year = date_from.year if date_from else None
+    to_year = date_to.year if date_to else None
 
     counts = {}
     for row in query.all():
-        if date_from or date_to:
-            d = _parse_issuance_date(row.date_of_issuance) if row.date_of_issuance else None
-            if d is None:
+        if from_year or to_year:
+            m = re.search(r'\b((?:19|20)\d{2})\b', row.date_of_issuance or '')
+            if not m:
                 continue
-            if date_from and d < date_from:
+            year = int(m.group(1))
+            if from_year and year < from_year:
                 continue
-            if date_to and d > date_to:
+            if to_year and year > to_year:
                 continue
         counts[row.state] = counts.get(row.state, 0) + 1
 
     result = [{"state": s, "count": c} for s, c in sorted(counts.items())]
     return jsonify(result)
+
+
+@app.route("/api/waivers/meta")
+def waivers_meta():
+    from sqlalchemy import distinct
+
+    # date_of_issuance is stored as a human-readable string, so parse in Python
+    # to find the true chronological min and max.
+    date_rows = (
+        g.db.query(distinct(Waiver.date_of_issuance))
+        .filter(Waiver.date_of_issuance.isnot(None))
+        .all()
+    )
+    years = set()
+    for (raw,) in date_rows:
+        if raw:
+            m = re.search(r'\b((?:19|20)\d{2})\b', raw)
+            if m:
+                years.add(int(m.group(1)))
+
+    date_range = {"min": None, "max": None}
+    if years:
+        date_range["min"] = str(min(years))
+        date_range["max"] = str(max(years))
+
+    reg_rows = (
+        g.db.query(distinct(Waiver.waivered_regulation))
+        .filter(Waiver.waivered_regulation.isnot(None))
+        .all()
+    )
+    reg_codes = set()
+    for (raw,) in reg_rows:
+        if raw:
+            for part in raw.split(","):
+                part = part.strip()
+                if part:
+                    reg_codes.add(part)
+    regulations = sorted(reg_codes)
+
+    return jsonify({"date_range": date_range, "regulations": regulations})
 
 
 @app.route("/refresh", methods=["POST"])

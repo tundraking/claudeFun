@@ -5,7 +5,7 @@
 {% block content %}
 
 {# ── URL-building macros ─────────────────────────────────────────────── #}
-{% macro filter_qs() %}date={{ date | urlencode }}&person={{ person | urlencode }}&company={{ company | urlencode }}&regulation={{ regulation | urlencode }}{% endmacro %}
+{% macro filter_qs() %}date={{ date | urlencode }}&person={{ person | urlencode }}&company={{ company | urlencode }}&regulation={{ regulation | urlencode }}&state={{ state | urlencode }}{% endmacro %}
 
 {% macro sort_url(col) %}/?{{ filter_qs() }}&sort={{ col }}&order={% if sort == col and order == 'asc' %}desc{% else %}asc{% endif %}{% endmacro %}
 
@@ -40,6 +40,10 @@
         <div class="col-sm-6 col-lg-3">
           <label class="form-label fw-semibold">Waivered Regulation</label>
           <input type="text" name="regulation" class="form-control" value="{{ regulation }}" placeholder="e.g. 107.51">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label fw-semibold">State</label>
+          <input type="text" name="state" class="form-control" value="{{ state }}" placeholder="e.g. CA">
         </div>
       </div>
       <div class="mt-3 d-flex gap-2">
@@ -94,6 +98,7 @@
               <i class="bi bi-caret-{{ 'up' if (sort == 'regulation' and order == 'asc') else 'down' }}-fill ms-1{% if sort != 'regulation' %} opacity-25{% endif %}"></i>
             </a>
           </th>
+          <th>State</th>
           <th class="text-center">PDF</th>
         </tr>
       </thead>
@@ -107,6 +112,7 @@
             <td>{{ w.company_name or '—' }}</td>
             <td>{{ (w.responsible_person or '—') | clean_person }}</td>
             <td>{{ w.waivered_regulation or '—' }}</td>
+            <td>{{ w.state or '—' }}</td>
             <td class="text-center">
               {% if w.pdf_url %}
                 <a href="{{ w.pdf_url }}" target="_blank" rel="noopener"
@@ -165,7 +171,7 @@
 
 {% else %}
   <div class="alert alert-secondary text-center">
-    {% if date or person or company or regulation %}
+    {% if date or person or company or regulation or state %}
       No waivers matched your search criteria.
     {% else %}
       No waivers in database yet. Run <code>python scraper.py</code> first.

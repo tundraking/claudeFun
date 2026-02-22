@@ -5,33 +5,38 @@
 {% block content %}
 <div class="card mb-3">
   <div class="card-body py-2">
-    <form id="filter-form" class="row g-2 align-items-end">
-      <div class="col-auto">
-        <label class="form-label mb-1 small fw-semibold" for="date_from">Date from</label>
-        <input type="date" id="date_from" name="date_from" class="form-control form-control-sm">
+    <div class="row g-3 align-items-start">
+      <div class="col-auto" style="min-width:280px;">
+        <label class="form-label mb-1 small fw-semibold">
+          Year range: <span id="year-range-label">…</span>
+        </label>
+        <div id="year-slider" style="margin: 10px 8px 0;"></div>
       </div>
       <div class="col-auto">
-        <label class="form-label mb-1 small fw-semibold" for="date_to">Date to</label>
-        <input type="date" id="date_to" name="date_to" class="form-control form-control-sm">
+        <label class="form-label mb-1 small fw-semibold">Regulation</label>
+        <div id="regulation-checks" class="d-flex flex-wrap" style="gap:4px 14px; max-width:420px;">
+          {% for reg in ['107.25','107.29','107.31','107.33','107.35','107.37','107.39','107.41','107.51','107.145'] %}
+          <div class="form-check mb-0">
+            <input class="form-check-input reg-check" type="checkbox"
+                   id="reg-{{ reg }}" value="{{ reg }}">
+            <label class="form-check-label small" for="reg-{{ reg }}">{{ reg }}</label>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-      <div class="col-auto">
-        <label class="form-label mb-1 small fw-semibold" for="regulation">Regulation (e.g. 107.31)</label>
-        <input type="text" id="regulation" name="regulation" class="form-control form-control-sm"
-               placeholder="107.31" style="width:140px;">
-      </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-primary">Apply</button>
-      </div>
-    </form>
+    </div>
   </div>
 </div>
 
+<p id="filter-bar" class="small mb-2" style="display:none;"></p>
 <div id="map" style="width:100%; height:68vh; border-radius:6px; border:1px solid #dee2e6;"></div>
 <p class="text-muted small mt-2 mb-0" id="map-summary"></p>
 {% endblock %}
 
 {% block scripts %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
@@ -143,14 +148,70 @@ function buildLayer(countByState, buckets) {
   choropleth.addTo(map);
 }
 
+const sliderEl = document.getElementById('year-slider');
+const yearLabelEl = document.getElementById('year-range-label');
+let sliderMinYear = null;
+let sliderMaxYear = null;
+
+function getSelectedRegs() {
+  return Array.from(document.querySelectorAll('.reg-check:checked')).map(el => el.value);
+}
+
+function updateFilterSummary(fromYear, toYear, selectedRegs, total, stateCount) {
+  const bar = document.getElementById('filter-bar');
+  const yearActive = sliderMinYear !== null && (fromYear !== sliderMinYear || toYear !== sliderMaxYear);
+  const regsActive = selectedRegs.length > 0;
+
+  if (!yearActive && !regsActive) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  const xBtn = (fn) =>
+    `<button onclick="${fn}()" style="border:none;background:none;padding:0 0 0 3px;line-height:1;cursor:pointer;color:#6c757d;" title="Clear filter">&#x2715;</button>`;
+
+  const parts = [];
+  if (yearActive) {
+    parts.push(`${fromYear}–${toYear}${xBtn('clearYearFilter')}`);
+  }
+  if (regsActive) {
+    parts.push(`Regulations: ${selectedRegs.join(', ')}${xBtn('clearRegFilter')}`);
+  }
+
+  const countText = total > 0
+    ? `${total.toLocaleString()} waiver${total !== 1 ? 's' : ''} across ${stateCount} state${stateCount !== 1 ? 's' : ''}`
+    : 'no waivers match';
+
+  bar.innerHTML = `<span class="text-muted fw-semibold">Filtered:</span> ${parts.join(' · ')} · ${countText}`;
+  bar.style.display = '';
+}
+
+function clearYearFilter() {
+  sliderEl.noUiSlider.set([sliderMinYear, sliderMaxYear]);
+  applyFilters();
+}
+
+function clearRegFilter() {
+  document.querySelectorAll('.reg-check').forEach(el => { el.checked = false; });
+  applyFilters();
+}
+
 function applyFilters() {
+  if (!sliderEl.noUiSlider) return;
+  const values = sliderEl.noUiSlider.get();
+  const fromYear = Math.round(values[0]);
+  const toYear = Math.round(values[1]);
+
   const params = new URLSearchParams();
-  const dateFrom   = document.getElementById('date_from').value;
-  const dateTo     = document.getElementById('date_to').value;
-  const regulation = document.getElementById('regulation').value.trim();
-  if (dateFrom)   params.set('date_from',  dateFrom);
-  if (dateTo)     params.set('date_to',    dateTo);
-  if (regulation) params.set('regulation', regulation);
+  const yearFiltered = sliderMinYear !== null && (fromYear !== sliderMinYear || toYear !== sliderMaxYear);
+  if (yearFiltered) {
+    params.set('date_from', `${fromYear}-01-01`);
+    params.set('date_to', `${toYear}-12-31`);
+  }
+  const selectedRegs = getSelectedRegs();
+  if (selectedRegs.length > 0) {
+    params.set('regulation', selectedRegs.join(','));
+  }
 
   fetch('/api/waivers/by-state?' + params.toString())
     .then(r => r.json())
@@ -183,15 +244,54 @@ function applyFilters() {
         total > 0
           ? `Showing ${total.toLocaleString()} waivers across ${stateCount} state${stateCount !== 1 ? 's' : ''}`
           : 'No waivers match the current filters.';
+
+      updateFilterSummary(fromYear, toYear, selectedRegs, total, stateCount);
     });
 }
 
-document.getElementById('filter-form').addEventListener('submit', function (e) {
-  e.preventDefault();
-  applyFilters();
-});
+// Fire applyFilters whenever any regulation checkbox changes
+document.getElementById('regulation-checks').addEventListener('change', applyFilters);
 
-// Initial load — no filters, shows all waivers
-applyFilters();
+// Extract the 4-digit year from a human-readable date string like "January 15, 2020"
+function parseYear(dateStr) {
+  if (!dateStr) return null;
+  const m = dateStr.match(/\b(\d{4})\b/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Fetch metadata to initialize the slider, then load the map
+fetch('/api/waivers/meta')
+  .then(r => r.json())
+  .then(meta => {
+    let minYear = parseYear(meta.date_range && meta.date_range.min);
+    let maxYear = parseYear(meta.date_range && meta.date_range.max);
+    if (!minYear || !maxYear) {
+      minYear = 2015;
+      maxYear = new Date().getFullYear();
+    }
+    if (minYear >= maxYear) {
+      maxYear = minYear + 1;
+    }
+
+    sliderMinYear = minYear;
+    sliderMaxYear = maxYear;
+
+    noUiSlider.create(sliderEl, {
+      start: [minYear, maxYear],
+      step: 1,
+      connect: true,
+      range: { min: minYear, max: maxYear },
+    });
+
+    sliderEl.noUiSlider.on('update', function (values) {
+      yearLabelEl.textContent = `${Math.round(values[0])} – ${Math.round(values[1])}`;
+    });
+
+    sliderEl.noUiSlider.on('change', function () {
+      applyFilters();
+    });
+
+    applyFilters();
+  });
 </script>
 {% endblock %}
