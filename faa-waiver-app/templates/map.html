@@ -1,44 +1,197 @@
 {% extends "base.html" %}
 
-{% block title %}Map — FAA Waiver Browser{% endblock %}
+{% block title %}State Map — FAA Waiver Browser{% endblock %}
 
 {% block content %}
-<div id="map" style="width:100%; height:75vh; border-radius:6px; border:1px solid #dee2e6;"></div>
-<p class="text-muted small mt-2 mb-0" id="marker-count"></p>
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form id="filter-form" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold" for="date_from">Date from</label>
+        <input type="date" id="date_from" name="date_from" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold" for="date_to">Date to</label>
+        <input type="date" id="date_to" name="date_to" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <label class="form-label mb-1 small fw-semibold" for="regulation">Regulation (e.g. 107.31)</label>
+        <input type="text" id="regulation" name="regulation" class="form-control form-control-sm"
+               placeholder="107.31" style="width:140px;">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="map" style="width:100%; height:68vh; border-radius:6px; border:1px solid #dee2e6;"></div>
+<p class="text-muted small mt-2 mb-0" id="map-summary"></p>
 {% endblock %}
 
 {% block scripts %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <script>
-  const map = L.map('map').setView([39.5, -98.35], 4);
+const GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(map);
+const NAME_TO_ABBR = {
+  'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
+  'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
+  'Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA',
+  'Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD',
+  'Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS',
+  'Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH',
+  'New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC',
+  'North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA',
+  'Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD','Tennessee':'TN',
+  'Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA',
+  'West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY','District of Columbia':'DC',
+};
 
-  fetch('/api/waivers/geo')
-    .then(r => r.json())
-    .then(waivers => {
-      const cluster = L.markerClusterGroup({ chunkedLoading: true });
-      const markers = waivers.map(w => {
-        const baseNumber = (w.waiver_number || '').match(/107W-\d{4}-\d+/);
-        const href = baseNumber ? '/waiver/' + baseNumber[0] : '#';
-        const popup = [
-          '<a href="' + href + '">' + (w.waiver_number || '—') + '</a>',
-          w.company_name || '',
-          w.responsible_person || '',
-        ].filter(Boolean).join('<br>');
-        return L.marker([w.latitude, w.longitude]).bindPopup(popup);
+// White → dark-blue color ramp (5 levels, index 0 = zero count)
+const COLORS = ['#f0f0f0', '#c6dbef', '#6baed6', '#2171b5', '#08306b'];
+
+// Build auto-sized buckets from the actual max value
+function makeBuckets(maxVal) {
+  if (maxVal <= 0) {
+    return [{ min: 0, max: 0, color: COLORS[0], label: '0' }];
+  }
+  // Four non-zero buckets that split the range evenly
+  const step = Math.max(1, Math.ceil(maxVal / 4));
+  const buckets = [{ min: 0, max: 0, color: COLORS[0], label: '0' }];
+  for (let i = 0; i < 4; i++) {
+    const lo = i * step + 1;
+    const hi = (i === 3) ? Infinity : (i + 1) * step;
+    const label = hi === Infinity ? `${lo.toLocaleString()}+` : `${lo.toLocaleString()}–${hi.toLocaleString()}`;
+    buckets.push({ min: lo, max: hi, color: COLORS[i + 1], label });
+  }
+  return buckets;
+}
+
+function bucketColor(count, buckets) {
+  for (const b of buckets) {
+    if (count >= b.min && count <= b.max) return b.color;
+  }
+  return COLORS[COLORS.length - 1];
+}
+
+const map = L.map('map').setView([39.5, -98.35], 4);
+
+// CartoDB Positron — clean, minimal basemap
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+}).addTo(map);
+
+// Dynamic legend
+const legendCtrl = L.control({ position: 'bottomright' });
+let legendDiv = null;
+legendCtrl.onAdd = function () {
+  legendDiv = L.DomUtil.create('div');
+  legendDiv.style.cssText = 'background:#fff;padding:8px 12px;border-radius:4px;border:1px solid #ccc;font-size:12px;line-height:1.6;';
+  return legendDiv;
+};
+legendCtrl.addTo(map);
+
+function updateLegend(buckets) {
+  if (!legendDiv) return;
+  legendDiv.innerHTML = '<strong style="display:block;margin-bottom:4px;">Waivers</strong>' +
+    buckets.map(b =>
+      `<span style="display:inline-block;width:14px;height:14px;background:${b.color};border:1px solid #aaa;vertical-align:middle;margin-right:5px;"></span>${b.label}`
+    ).join('<br>');
+}
+
+let geojsonData = null;
+let choropleth = null;
+
+function buildLayer(countByState, buckets) {
+  if (choropleth) { map.removeLayer(choropleth); }
+
+  choropleth = L.geoJSON(geojsonData, {
+    style: function (feature) {
+      const abbr = NAME_TO_ABBR[feature.properties.name];
+      const count = (abbr && countByState[abbr]) || 0;
+      return {
+        fillColor: bucketColor(count, buckets),
+        fillOpacity: 0.75,
+        color: '#888',
+        weight: 0.8,
+      };
+    },
+    onEachFeature: function (feature, layer) {
+      const name  = feature.properties.name;
+      const abbr  = NAME_TO_ABBR[name];
+      const count = (abbr && countByState[abbr]) || 0;
+      layer.bindTooltip(
+        `<strong>${name} (${abbr || '?'})</strong><br>${count.toLocaleString()} waiver${count !== 1 ? 's' : ''}`,
+        { sticky: true }
+      );
+      layer.on({
+        mouseover: function (e) {
+          e.target.setStyle({ weight: 2, color: '#222', fillOpacity: 0.9 });
+          e.target.bringToFront();
+        },
+        mouseout: function (e) {
+          choropleth.resetStyle(e.target);
+        },
       });
-      cluster.addLayers(markers);
-      map.addLayer(cluster);
-      document.getElementById('marker-count').textContent =
-        'Showing ' + waivers.length.toLocaleString() + ' geocoded waivers';
+    },
+  });
+  choropleth.addTo(map);
+}
+
+function applyFilters() {
+  const params = new URLSearchParams();
+  const dateFrom   = document.getElementById('date_from').value;
+  const dateTo     = document.getElementById('date_to').value;
+  const regulation = document.getElementById('regulation').value.trim();
+  if (dateFrom)   params.set('date_from',  dateFrom);
+  if (dateTo)     params.set('date_to',    dateTo);
+  if (regulation) params.set('regulation', regulation);
+
+  fetch('/api/waivers/by-state?' + params.toString())
+    .then(r => r.json())
+    .then(rows => {
+      const countByState = {};
+      let total = 0;
+      let maxVal = 0;
+      for (const row of rows) {
+        countByState[row.state] = row.count;
+        total += row.count;
+        if (row.count > maxVal) maxVal = row.count;
+      }
+
+      const buckets = makeBuckets(maxVal);
+      updateLegend(buckets);
+
+      if (geojsonData) {
+        buildLayer(countByState, buckets);
+      } else {
+        fetch(GEOJSON_URL)
+          .then(r => r.json())
+          .then(gj => {
+            geojsonData = gj;
+            buildLayer(countByState, buckets);
+          });
+      }
+
+      const stateCount = rows.length;
+      document.getElementById('map-summary').textContent =
+        total > 0
+          ? `Showing ${total.toLocaleString()} waivers across ${stateCount} state${stateCount !== 1 ? 's' : ''}`
+          : 'No waivers match the current filters.';
     });
+}
+
+document.getElementById('filter-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  applyFilters();
+});
+
+// Initial load — no filters, shows all waivers
+applyFilters();
 </script>
 {% endblock %}

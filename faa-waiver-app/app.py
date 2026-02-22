@@ -6,6 +6,7 @@ from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, popul
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
 from geocode import geocode_new_waivers
+from parse_states import parse_states_for_new_waivers
 
 app = Flask(__name__)
 PDF_DIR = os.path.join(os.path.dirname(__file__), "pdfs")
@@ -240,6 +241,58 @@ def analysis():
     return render_template("analysis.html", waivers=waivers)
 
 
+def _parse_date_ymd(ymd):
+    """Convert 'YYYY-MM-DD' to a datetime.date, or None on failure."""
+    from datetime import datetime
+    try:
+        return datetime.strptime(ymd, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_issuance_date(raw):
+    """Convert a human-readable date string (e.g. 'January 15, 2020') to date."""
+    from datetime import datetime
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(raw.strip(), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+@app.route("/api/waivers/by-state")
+def waivers_by_state():
+    from sqlalchemy import func
+    date_from = _parse_date_ymd(request.args.get("date_from", "").strip())
+    date_to = _parse_date_ymd(request.args.get("date_to", "").strip())
+    regulation = request.args.get("regulation", "").strip()
+
+    # Pull every waiver that has a state; filter in Python because
+    # date_of_issuance is stored as a human-readable string.
+    query = (
+        g.db.query(Waiver.state, Waiver.date_of_issuance, Waiver.waivered_regulation)
+        .filter(Waiver.state.isnot(None))
+    )
+    if regulation:
+        query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+
+    counts = {}
+    for row in query.all():
+        if date_from or date_to:
+            d = _parse_issuance_date(row.date_of_issuance) if row.date_of_issuance else None
+            if d is None:
+                continue
+            if date_from and d < date_from:
+                continue
+            if date_to and d > date_to:
+                continue
+        counts[row.state] = counts.get(row.state, 0) + 1
+
+    result = [{"state": s, "count": c} for s, c in sorted(counts.items())]
+    return jsonify(result)
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh():
     print("[Refresh] Step 1: Scraping for new waivers from FAA table...")
@@ -254,8 +307,11 @@ def refresh():
     print("[Refresh] Step 4: Geocoding new waivers...")
     geocoded = geocode_new_waivers()
 
-    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed, {geocoded} address(es) geocoded.")
-    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed, "geocoded": geocoded})
+    print("[Refresh] Step 5: Parsing states for new waivers...")
+    states_parsed = parse_states_for_new_waivers()
+
+    print(f"[Refresh] Done. {new_waivers} new waiver(s) added, {pdfs_processed} PDF(s) processed, {geocoded} address(es) geocoded, {states_parsed} state(s) parsed.")
+    return jsonify({"success": True, "new_waivers": new_waivers, "pdfs_processed": pdfs_processed, "geocoded": geocoded, "states_parsed": states_parsed})
 
 
 @app.route("/pdf/<path:filename>")
