@@ -1,39 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}Waiver Map — FAA Waiver Browser{% endblock %}
+{% block title %}Map — FAA Waiver Browser{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center mb-3 gap-2">
-  <h4 class="mb-0"><i class="bi bi-map me-2"></i>Geocoded Waivers</h4>
-  <span class="text-muted small" id="marker-count"></span>
-</div>
-<div id="map" style="height: 72vh; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+<div id="map" style="width:100%; height:75vh; border-radius:6px; border:1px solid #dee2e6;"></div>
+<p class="text-muted small mt-2 mb-0" id="marker-count"></p>
 {% endblock %}
 
 {% block scripts %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-  const map = L.map('map').setView([38.5, -96], 4);
+  const map = L.map('map').setView([39.5, -98.35], 4);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);
 
   fetch('/api/waivers/geo')
     .then(r => r.json())
     .then(waivers => {
-      document.getElementById('marker-count').textContent = `(${waivers.length} waivers)`;
       waivers.forEach(w => {
-        const popup = `
-          <strong>${w.waiver_number || '—'}</strong><br>
-          ${w.company_name ? w.company_name + '<br>' : ''}
-          ${w.responsible_person || ''}
-          <br><a href="/waiver/${encodeURIComponent(w.waiver_number)}" target="_blank">View waiver →</a>
-        `;
+        const baseNumber = (w.waiver_number || '').match(/107W-\d{4}-\d+/);
+        const href = baseNumber ? '/waiver/' + baseNumber[0] : '#';
+        const popup = [
+          '<a href="' + href + '">' + (w.waiver_number || '—') + '</a>',
+          w.company_name || '',
+          w.responsible_person || '',
+        ].filter(Boolean).join('<br>');
         L.marker([w.latitude, w.longitude]).addTo(map).bindPopup(popup);
       });
+      document.getElementById('marker-count').textContent =
+        'Showing ' + waivers.length.toLocaleString() + ' geocoded waivers';
     });
 </script>
 {% endblock %}
