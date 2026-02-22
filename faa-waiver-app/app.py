@@ -97,6 +97,7 @@ def index():
     person = request.args.get("person", "").strip()
     company = request.args.get("company", "").strip()
     regulation = request.args.get("regulation", "").strip()
+    state = request.args.get("state", "").strip()
     sort = request.args.get("sort", "id")
     order = request.args.get("order", "asc")
     page = max(1, request.args.get("page", 1, type=int))
@@ -110,6 +111,8 @@ def index():
         query = query.filter(Waiver.company_name.ilike(f"%{company}%"))
     if regulation:
         query = query.filter(Waiver.waivered_regulation.ilike(f"%{regulation}%"))
+    if state:
+        query = query.filter(Waiver.state.ilike(f"%{state}%"))
 
     sort_col = SORT_COLUMNS.get(sort, Waiver.id)
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
@@ -126,6 +129,7 @@ def index():
         person=person,
         company=company,
         regulation=regulation,
+        state=state,
         sort=sort,
         order=order,
         page=page,
