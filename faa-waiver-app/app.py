@@ -279,15 +279,19 @@ def waivers_by_state():
         from sqlalchemy import or_
         query = query.filter(or_(*(Waiver.waivered_regulation.ilike(f"%{r}%") for r in regulations)))
 
+    from_year = date_from.year if date_from else None
+    to_year = date_to.year if date_to else None
+
     counts = {}
     for row in query.all():
-        if date_from or date_to:
-            d = _parse_issuance_date(row.date_of_issuance) if row.date_of_issuance else None
-            if d is None:
+        if from_year or to_year:
+            m = re.search(r'\b((?:19|20)\d{2})\b', row.date_of_issuance or '')
+            if not m:
                 continue
-            if date_from and d < date_from:
+            year = int(m.group(1))
+            if from_year and year < from_year:
                 continue
-            if date_to and d > date_to:
+            if to_year and year > to_year:
                 continue
         counts[row.state] = counts.get(row.state, 0) + 1
 
@@ -306,16 +310,17 @@ def waivers_meta():
         .filter(Waiver.date_of_issuance.isnot(None))
         .all()
     )
-    parsed_dates = []
+    years = set()
     for (raw,) in date_rows:
-        d = _parse_issuance_date(raw)
-        if d is not None:
-            parsed_dates.append((d, raw))
+        if raw:
+            m = re.search(r'\b((?:19|20)\d{2})\b', raw)
+            if m:
+                years.add(int(m.group(1)))
 
     date_range = {"min": None, "max": None}
-    if parsed_dates:
-        date_range["min"] = min(parsed_dates, key=lambda x: x[0])[1]
-        date_range["max"] = max(parsed_dates, key=lambda x: x[0])[1]
+    if years:
+        date_range["min"] = str(min(years))
+        date_range["max"] = str(max(years))
 
     reg_rows = (
         g.db.query(distinct(Waiver.waivered_regulation))
