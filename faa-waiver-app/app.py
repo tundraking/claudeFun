@@ -293,6 +293,38 @@ def waivers_by_state():
     return jsonify(result)
 
 
+@app.route("/api/waivers/meta")
+def waivers_meta():
+    from sqlalchemy import distinct
+
+    # date_of_issuance is stored as a human-readable string, so parse in Python
+    # to find the true chronological min and max.
+    date_rows = (
+        g.db.query(distinct(Waiver.date_of_issuance))
+        .filter(Waiver.date_of_issuance.isnot(None))
+        .all()
+    )
+    parsed_dates = []
+    for (raw,) in date_rows:
+        d = _parse_issuance_date(raw)
+        if d is not None:
+            parsed_dates.append((d, raw))
+
+    date_range = {"min": None, "max": None}
+    if parsed_dates:
+        date_range["min"] = min(parsed_dates, key=lambda x: x[0])[1]
+        date_range["max"] = max(parsed_dates, key=lambda x: x[0])[1]
+
+    reg_rows = (
+        g.db.query(distinct(Waiver.waivered_regulation))
+        .filter(Waiver.waivered_regulation.isnot(None))
+        .all()
+    )
+    regulations = sorted(r for (r,) in reg_rows if r)
+
+    return jsonify({"date_range": date_range, "regulations": regulations})
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh():
     print("[Refresh] Step 1: Scraping for new waivers from FAA table...")
