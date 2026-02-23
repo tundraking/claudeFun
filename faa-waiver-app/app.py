@@ -347,42 +347,33 @@ def waivers_meta():
 def shielding():
     import json as _json
     records = (
-        g.db.query(ShieldingAnalysis)
-        .order_by(ShieldingAnalysis.waiver_number)
+        g.db.query(ShieldingAnalysis, Waiver)
+        .join(Waiver, ShieldingAnalysis.waiver_number == Waiver.waiver_number)
+        .order_by(ShieldingAnalysis.waiver_number.desc())
         .all()
     )
     rows = []
-    for rec in records:
-        parsed = None
-        if rec.structured_data:
-            try:
-                parsed = _json.loads(rec.structured_data)
-            except (ValueError, TypeError):
-                parsed = None
-
+    for rec, waiver in records:
         shielding_types = []
-        altitude_limits = []
-        distance_limits = []
-        if parsed and isinstance(parsed, dict):
-            shielding_types = parsed.get("shielding_types") or []
-            for prov in (parsed.get("provisions") or []):
-                if not isinstance(prov, dict):
-                    continue
-                alt = prov.get("altitude_limits")
-                dist = prov.get("distance_limits")
-                if alt:
-                    altitude_limits.append(alt)
-                if dist:
-                    distance_limits.append(dist)
+        if rec.shielding_types:
+            try:
+                shielding_types = _json.loads(rec.shielding_types)
+            except (ValueError, TypeError):
+                shielding_types = []
+
+        pdf_link = None
+        if waiver.pdf_local_path:
+            pdf_link = "/pdf/" + os.path.basename(waiver.pdf_local_path)
+        elif waiver.pdf_url:
+            pdf_link = waiver.pdf_url
 
         rows.append({
             "waiver_number": rec.waiver_number,
+            "company_name": waiver.company_name or "—",
+            "responsible_person": waiver.responsible_person or "—",
             "shielding_types": shielding_types,
-            "altitude_limits": altitude_limits,
-            "distance_limits": distance_limits,
             "raw_blocks": rec.raw_blocks or "",
-            "structured_json": _json.dumps(parsed, indent=2) if parsed else (rec.structured_data or ""),
-            "ollama_processed": rec.ollama_processed,
+            "pdf_link": pdf_link,
         })
     return render_template("shielding.html", rows=rows)
 
