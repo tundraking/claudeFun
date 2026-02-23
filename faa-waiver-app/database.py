@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, Float, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, Float, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///waivers.db"
@@ -34,8 +34,24 @@ class Waiver(Base):
     state = Column(String, nullable=True)
 
 
+class ShieldingAnalysis(Base):
+    __tablename__ = "shielding_analysis"
+
+    id = Column(Integer, primary_key=True)
+    waiver_id = Column(Integer, ForeignKey("waivers.id"), unique=True)
+    waiver_number = Column(String)
+    raw_blocks = Column(Text)
+    shielding_types = Column(Text)
+    structured_data = Column(Text)
+    ollama_processed = Column(Boolean, default=False)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+
+def init_shielding_table():
+    ShieldingAnalysis.__table__.create(bind=engine, checkfirst=True)
 
 
 def setup_fts():

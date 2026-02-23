@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Shielding Analysis — FAA Waiver Browser{% endblock %}
+
+{% block content %}
+<style>
+  .raw-block {
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.82em;
+    background: #f9f9f9;
+    border: 1px solid #dee2e6;
+    padding: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+</style>
+
+<h4 class="mb-4 fw-bold">
+  <i class="bi bi-shield-check me-2"></i>Shielding Analysis
+</h4>
+
+{% if not rows %}
+  <div class="alert alert-warning">
+    No shielding analysis records found. Run <code>extract_shielding.py</code> first.
+  </div>
+{% else %}
+
+  <p class="text-muted small mb-3">{{ rows | length }} waiver{{ 's' if rows | length != 1 }} with shielding provisions</p>
+
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered table-hover align-middle mb-0 bg-white" id="shielding-table">
+      <thead>
+        <tr>
+          <th>Waiver Number</th>
+          <th>Company Name</th>
+          <th>Responsible Person</th>
+          <th>Shielding Types</th>
+          <th>Raw Blocks</th>
+          <th class="text-center">PDF</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="text-nowrap">
+              <a href="/waiver/{{ row.waiver_number | clean_waiver_number }}">
+                {{ (row.waiver_number or '—') | clean_waiver_number }}
+              </a>
+            </td>
+            <td>{{ row.company_name }}</td>
+            <td class="text-nowrap">{{ row.responsible_person | clean_person }}</td>
+            <td>
+              {% if row.shielding_types %}
+                {% for t in row.shielding_types %}
+                  <span class="badge bg-primary me-1 mb-1">{{ t }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.raw_blocks %}
+                <div class="raw-block">{{ row.raw_blocks }}</div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if row.pdf_link %}
+                <a href="{{ row.pdf_link }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+{% endif %}
+{% endblock %}

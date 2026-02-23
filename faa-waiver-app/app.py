@@ -2,7 +2,7 @@ import os
 import re
 from flask import Flask, render_template, request, abort, send_from_directory, g, jsonify
 from sqlalchemy import text
-from database import SessionLocal, Waiver, init_db, migrate_db, setup_fts, populate_fts
+from database import SessionLocal, Waiver, ShieldingAnalysis, init_db, migrate_db, setup_fts, populate_fts
 from scraper import scrape_waivers
 from extract_text import extract_text_from_pdfs
 from geocode import geocode_new_waivers
@@ -341,6 +341,41 @@ def waivers_meta():
     regulations = sorted(reg_codes)
 
     return jsonify({"date_range": date_range, "regulations": regulations})
+
+
+@app.route("/shielding")
+def shielding():
+    import json as _json
+    records = (
+        g.db.query(ShieldingAnalysis, Waiver)
+        .join(Waiver, ShieldingAnalysis.waiver_number == Waiver.waiver_number)
+        .order_by(ShieldingAnalysis.waiver_number.desc())
+        .all()
+    )
+    rows = []
+    for rec, waiver in records:
+        shielding_types = []
+        if rec.shielding_types:
+            try:
+                shielding_types = _json.loads(rec.shielding_types)
+            except (ValueError, TypeError):
+                shielding_types = []
+
+        pdf_link = None
+        if waiver.pdf_local_path:
+            pdf_link = "/pdf/" + os.path.basename(waiver.pdf_local_path)
+        elif waiver.pdf_url:
+            pdf_link = waiver.pdf_url
+
+        rows.append({
+            "waiver_number": rec.waiver_number,
+            "company_name": waiver.company_name or "—",
+            "responsible_person": waiver.responsible_person or "—",
+            "shielding_types": shielding_types,
+            "raw_blocks": rec.raw_blocks or "",
+            "pdf_link": pdf_link,
+        })
+    return render_template("shielding.html", rows=rows)
 
 
 @app.route("/refresh", methods=["POST"])
