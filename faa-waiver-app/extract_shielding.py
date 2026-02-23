@@ -14,8 +14,10 @@ Run from the repository root:
 
 Optional flags:
     --model mistral:7b   Use a different Ollama model (default: llama3.2:3b)
-    --reprocess          Re-run Ollama for waivers that already have a
-                         shielding_analysis record, overwriting previous results
+    --reprocess          Re-run for waivers that already have a shielding_analysis
+                         record, overwriting previous results
+    --skip-ollama        Extract and save raw blocks/shielding_types only;
+                         skip the Ollama call and clear structured_data
 
 DEPENDENCIES
 ------------
@@ -52,28 +54,36 @@ Return a JSON object with exactly these fields:
 
 Return only raw JSON with no markdown formatting, no code fences, and no additional explanation."""
 
-# Matches references to physical prop-guard / hardware shielding that are NOT
-# operational airspace shielding concepts and should be excluded.
-HARDWARE_SHIELD_RE = re.compile(
-    r"shielding\s+for\s+rotating"
-    r"|shield\s+or\s+prevent\s+rotating"
-    r"|rotating\s+(?:components|parts)"
-    r"|prop\s+guard"
-    r"|laceration",
-    re.IGNORECASE,
-)
+# Normalized shielding operation types.  Section headings are matched against
+# this list; only sections whose heading contains one of these exact phrases
+# (case-insensitive) are kept.
+NORMALIZED_TYPES = [
+    "Long Range Linear Infrastructure Shielding",
+    "Electrical Transmission Line Shielded Operations",
+    "Closed Access Construction Site Shielding",
+    "Buried Right of Way Non-Shielded Operations",
+    "Critical Infrastructure Shielding",
+    "Closed Access Site Shielding",
+    "Standard Shielding",
+    "Public Safety Organization Shielded Operations",
+]
+
+NORMALIZED_TYPE_PATTERNS = [
+    (t, re.compile(re.escape(t), re.IGNORECASE)) for t in NORMALIZED_TYPES
+]
 
 
 def extract_shielding_blocks(pdf_text):
-    """Split pdf_text at top-level numbered sections and return those containing shielding keywords.
+    """Split pdf_text at top-level numbered sections and return those whose heading
+    matches a normalized shielding type.
 
-    Only sections whose heading (first two lines) mentions a shielding keyword are
-    kept. Sections that reference physical hardware shielding — prop guards, rotating
-    components, laceration protection — are excluded regardless of keyword presence.
+    Only the first two lines of each section (the heading zone) are tested so that
+    sections which merely mention a shielding term in their body are not captured.
+    The stored type name is always the canonical normalized form, not the raw heading.
 
     Returns:
         (blocks, types) where blocks is a list of raw text strings and types is a list
-        of heading names extracted from those blocks.
+        of normalized type names matched in those blocks.
     """
     # Split at lines that start a new top-level numbered section (e.g. "11. ").
     # The lookahead keeps the section number at the start of each part.
@@ -87,23 +97,20 @@ def extract_shielding_blocks(pdf_text):
         if not part:
             continue
 
-        # Check only the heading zone (first two lines) so that sections which
-        # merely mention "shielding" somewhere in their body are not captured.
+        # Test only the heading zone (first two lines).
         heading_zone = "\n".join(part.split("\n")[:2])
 
-        if not re.search(r"\bshield(?:ed|ing)?\b", heading_zone, re.IGNORECASE):
-            continue
+        matched_type = None
+        for type_name, pattern in NORMALIZED_TYPE_PATTERNS:
+            if pattern.search(heading_zone):
+                matched_type = type_name
+                break
 
-        # Skip physical hardware shielding (prop guards, rotating components).
-        if HARDWARE_SHIELD_RE.search(heading_zone):
+        if matched_type is None:
             continue
 
         shielding_blocks.append(part)
-
-        # Extract heading: digits + period + whitespace, then text up to first colon or newline.
-        heading_match = re.match(r"\d+\.\s+(.+?)(?::|$)", part, re.MULTILINE)
-        if heading_match:
-            shielding_types.append(heading_match.group(1).strip())
+        shielding_types.append(matched_type)
 
     return shielding_blocks, shielding_types
 
@@ -147,9 +154,7 @@ def call_ollama(raw_blocks_text, model):
         raise RuntimeError(f"Ollama request failed: {e}")
 
 
-def process_waiver(session, waiver, model, reprocess):
-    wnum = waiver.waiver_number or f"id={waiver.id}"
-
+def process_waiver(session, waiver, model, reprocess, use_ollama):
     existing = session.query(ShieldingAnalysis).filter_by(waiver_id=waiver.id).first()
     if existing and not reprocess:
         print(f"    [SKIP] Already processed (use --reprocess to reprocess)")
@@ -157,14 +162,14 @@ def process_waiver(session, waiver, model, reprocess):
 
     blocks, types = extract_shielding_blocks(waiver.pdf_text)
     if not blocks:
-        print(f"    [WARN] No shielding sections found in pdf_text — skipping")
+        print(f"    [WARN] No normalized shielding sections found in pdf_text — skipping")
         return
 
     raw_blocks_text = "\n\n".join(blocks)
     shielding_types_json = json.dumps(types)
     print(f"    Extracted {len(blocks)} block(s): {types}")
 
-    # Persist raw extraction before calling Ollama so we don't lose it on failure.
+    # Persist raw extraction and clear any prior Ollama output.
     if existing:
         record = existing
     else:
@@ -174,8 +179,13 @@ def process_waiver(session, waiver, model, reprocess):
     record.waiver_number = waiver.waiver_number
     record.raw_blocks = raw_blocks_text
     record.shielding_types = shielding_types_json
+    record.structured_data = None
     record.ollama_processed = False
     session.commit()
+
+    if not use_ollama:
+        print(f"    [OK] Raw extraction saved (Ollama skipped)")
+        return
 
     # Call Ollama and persist structured output.
     print(f"    Sending to Ollama ({model})...")
@@ -210,6 +220,11 @@ def main():
         action="store_true",
         help="Reprocess waivers that already have a shielding_analysis record",
     )
+    parser.add_argument(
+        "--skip-ollama",
+        action="store_true",
+        help="Save raw blocks and shielding_types only; skip Ollama and clear structured_data",
+    )
     args = parser.parse_args()
 
     init_shielding_table()
@@ -239,8 +254,13 @@ def main():
         session.close()
         return
 
+    use_ollama = not args.skip_ollama
+
     print(f"Found {len(waivers)} waiver(s) with shielding content.")
-    print(f"Using Ollama model: {args.model}")
+    if use_ollama:
+        print(f"Using Ollama model: {args.model}")
+    else:
+        print("--skip-ollama set: raw extraction only, structured_data will be cleared.")
     if args.reprocess:
         print("--reprocess flag set: existing records will be overwritten.")
     print()
@@ -249,7 +269,7 @@ def main():
         wnum = waiver.waiver_number or f"id={waiver.id}"
         print(f"[{i}/{len(waivers)}] Waiver {wnum}")
         try:
-            process_waiver(session, waiver, args.model, args.reprocess)
+            process_waiver(session, waiver, args.model, args.reprocess, use_ollama)
         except Exception as e:
             session.rollback()
             print(f"    [ERROR] Unexpected error: {e}")
